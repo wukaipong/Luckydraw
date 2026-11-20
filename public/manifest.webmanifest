@@ -1,0 +1,16 @@
+{
+  "name": "Circus Lucky Draw · 馬戲團幸運抽獎",
+  "short_name": "Lucky Draw",
+  "description": "A grand circus lucky draw wheel — names or numbers, music, confetti and agent control.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0d2b3a",
+  "theme_color": "#0d2b3a",
+  "icons": [
+    { "src": "./icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "./icons/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" },
+    { "src": "./icons/icon-1024.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" }
+  ]
+}

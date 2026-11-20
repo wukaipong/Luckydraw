@@ -1,0 +1,394 @@
+const midiHz = m => 440 * Math.pow(2, (m - 69) / 12);
+
+// Original calliope waltz, 16 bars of 3/4 in C major
+const MELODY = [
+  [76,1],[79,1],[84,1], [83,1.5],[79,.5],[76,1], [77,1],[81,1],[84,1], [83,2],[79,1],
+  [76,1],[79,1],[84,1], [86,1.5],[83,.5],[79,1], [81,1],[77,1],[74,1], [84,3],
+  [81,1],[84,1],[89,1], [88,1.5],[84,.5],[81,1], [79,1],[83,1],[86,1], [84,2],[76,1],
+  [77,1],[81,1],[84,1], [86,1],[83,1],[79,1], [81,1],[77,1],[74,1], [84,3]
+];
+const BASS_ROOTS = [48,48,53,55,48,55,53,48,53,53,55,48,53,55,53,48];
+const BEAT = 60 / 165;
+const LOOP_BEATS = 48;
+
+export class AudioEngine {
+  constructor() {
+    this.ctx = null;
+    this.unlocked = false;
+    this.muted = false;
+    this.slots = { bgm: null, spin: null, win: null };
+    this.custom = { bgm: null, spin: null, win: null };
+    this.failed = { bgm: false, spin: false, win: false };
+    this.desired = "bgm";
+    this.bgmTimer = null;
+    this.spinTimer = null;
+    this.spinNodes = [];
+    this.bgmBeat = 0;
+    this.bgmNext = 0;
+    this.ytApi = null;
+    this.melodyAt = new Map();
+    let b = 0;
+    for (const [m, d] of MELODY) {
+      const key = Math.round(b * 2) / 2;
+      if (!this.melodyAt.has(key)) this.melodyAt.set(key, []);
+      this.melodyAt.get(key).push([m, d]);
+      b += d;
+    }
+  }
+
+  unlock() {
+    if (this.unlocked) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    this.ctx = new AC();
+    this.master = this.ctx.createGain();
+    this.master.gain.value = this.muted ? 0 : 1;
+    this.master.connect(this.ctx.destination);
+    this.bgmBus = this.ctx.createGain(); this.bgmBus.connect(this.master);
+    this.spinBus = this.ctx.createGain(); this.spinBus.connect(this.master);
+    this.sfxBus = this.ctx.createGain(); this.sfxBus.connect(this.master);
+    const len = this.ctx.sampleRate * 2;
+    this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+    const d = this.noiseBuf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    this.unlocked = true;
+    if (this.ctx.state === "suspended") this.ctx.resume();
+    this.route();
+  }
+
+  musicState() {
+    const out = {};
+    for (const slot of ["bgm", "spin", "win"]) {
+      const c = this.custom[slot];
+      out[slot] = {
+        source: this.slots[slot] ? this.slots[slot].kind : "synth",
+        failed: this.failed[slot],
+        ready: c ? (c.kind === "youtube" ? c.ready : true) : true,
+        playerState: c && c.kind === "youtube" && c.ready ? c.player.getPlayerState() : null
+      };
+    }
+    return out;
+  }
+
+  setMuted(m) {
+    this.muted = m;
+    if (this.ctx) this.master.gain.setTargetAtTime(m ? 0 : 1, this.ctx.currentTime, 0.05);
+    for (const slot of Object.keys(this.custom)) {
+      const c = this.custom[slot];
+      if (!c) continue;
+      if (c.kind === "audio") c.el.muted = m;
+      if (c.kind === "youtube" && c.ready) m ? c.player.mute() : c.player.unMute();
+    }
+  }
+
+  setSource(slot, spec) {
+    if (!["bgm", "spin", "win"].includes(slot)) throw new Error("bad slot");
+    const old = this.custom[slot];
+    if (old) {
+      if (old.kind === "audio") { old.el.pause(); old.el.src = ""; }
+      if (old.kind === "youtube" && old.player) { try { old.player.destroy(); } catch {} }
+      this.custom[slot] = null;
+    }
+    this.slots[slot] = spec || null;
+    this.failed[slot] = false;
+    if (spec && spec.kind === "audio") {
+      const el = new Audio(spec.url);
+      el.loop = slot !== "win";
+      el.preload = "auto";
+      el.muted = this.muted;
+      el.addEventListener("error", () => {
+        this.failed[slot] = true;
+        if (this.unlocked && this.desired === slot) this.route();
+      });
+      if (slot === "win") el.onended = () => { if (this.desired === "win") { this.desired = "bgm"; this.route(); } };
+      this.custom[slot] = { kind: "audio", el };
+    } else if (spec && spec.kind === "youtube") {
+      const entry = { kind: "youtube", videoId: spec.videoId, ready: false, player: null };
+      this.custom[slot] = entry;
+      this.ensureYtApi().then(() => {
+        const div = document.createElement("div");
+        document.getElementById("ytHost").appendChild(div);
+        entry.player = new window.YT.Player(div, {
+          width: 200, height: 120, videoId: spec.videoId,
+          playerVars: { autoplay: 0, controls: 0, loop: slot !== "win" ? 1 : 0, playlist: spec.videoId, playsinline: 1 },
+          events: {
+            onReady: () => {
+              entry.ready = true;
+              this.muted ? entry.player.mute() : entry.player.unMute();
+              entry.player.setVolume(70);
+              if (this.desired === slot) this.route();
+            },
+            onError: () => {
+              this.failed[slot] = true;
+              if (this.unlocked && this.desired === slot) this.route();
+            },
+            onStateChange: e => {
+              if (slot === "win" && e.data === window.YT.PlayerState.ENDED && this.desired === "win") {
+                this.desired = "bgm"; this.route();
+              }
+            }
+          }
+        });
+      }).catch(() => {
+        this.failed[slot] = true;
+        if (this.unlocked && this.desired === slot) this.route();
+      });
+    }
+    if (this.unlocked) this.route();
+  }
+
+  ensureYtApi() {
+    if (window.YT && window.YT.Player) return Promise.resolve();
+    if (this.ytApi) return this.ytApi;
+    this.ytApi = new Promise((resolve, reject) => {
+      const prev = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => { prev && prev(); resolve(); };
+      const s = document.createElement("script");
+      s.src = "https://www.youtube.com/iframe_api";
+      s.onerror = () => reject(new Error("YouTube API unavailable"));
+      document.head.appendChild(s);
+      setTimeout(() => {
+        window.YT && window.YT.Player ? resolve() : reject(new Error("YouTube API timeout"));
+      }, 12000);
+    });
+    return this.ytApi;
+  }
+
+  stopAll() {
+    clearInterval(this.bgmTimer); this.bgmTimer = null;
+    clearInterval(this.spinTimer); this.spinTimer = null;
+    for (const n of this.spinNodes) { try { n.stop(); } catch {} }
+    this.spinNodes = [];
+    if (this.ctx) {
+      this.bgmBus.gain.setTargetAtTime(0, this.ctx.currentTime, 0.08);
+      this.spinBus.gain.setTargetAtTime(0, this.ctx.currentTime, 0.08);
+    }
+    for (const slot of Object.keys(this.custom)) {
+      const c = this.custom[slot];
+      if (!c) continue;
+      if (c.kind === "audio") c.el.pause();
+      if (c.kind === "youtube" && c.ready) c.player.pauseVideo();
+    }
+  }
+
+  route() {
+    if (!this.unlocked) return;
+    this.stopAll();
+    const slot = this.desired;
+    const c = this.custom[slot];
+    if (c && !this.failed[slot]) {
+      if (c.kind === "audio") { c.el.currentTime = 0; c.el.play().catch(() => {}); return; }
+      if (c.kind === "youtube" && c.ready) {
+        try { c.player.seekTo(0, true); } catch {}
+        c.player.playVideo();
+        return;
+      }
+      // custom source still loading: keep the show audible with the synth meanwhile
+    }
+    if (slot === "bgm") this.startSynthBgm();
+    else if (slot === "spin") this.startSynthSpin();
+    // 'win' with no playable custom source: fanfare already fired by endSpin
+  }
+
+  playBgm() { this.desired = "bgm"; this.route(); }
+
+  startSpin(duration) {
+    this.spinDuration = duration;
+    this.desired = "spin";
+    this.route();
+  }
+
+  endSpin() {
+    const hasWin = this.custom.win && !this.failed.win;
+    if (!hasWin) this.fanfare();
+    this.desired = "win";
+    this.route();
+    if (!hasWin) {
+      setTimeout(() => { if (this.desired === "win") this.playBgm(); }, 2000);
+    }
+  }
+
+  /* ————— synth: calliope waltz BGM ————— */
+  startSynthBgm() {
+    const ctx = this.ctx;
+    this.bgmBus.gain.setTargetAtTime(0.9, ctx.currentTime, 0.4);
+    this.bgmNext = ctx.currentTime + 0.1;
+    this.bgmBeat = 0;
+    this.bgmTimer = setInterval(() => {
+      while (this.bgmNext < ctx.currentTime + 0.4) {
+        this.scheduleBgmBeat(this.bgmBeat % LOOP_BEATS, this.bgmNext);
+        this.bgmBeat++;
+        this.bgmNext += BEAT;
+      }
+    }, 100);
+  }
+
+  scheduleBgmBeat(beat, when) {
+    const bar = Math.floor(beat / 3);
+    const inBar = beat % 3;
+    const root = BASS_ROOTS[bar];
+    if (inBar === 0) this.tone(root, when, BEAT * 0.85, "triangle", 0.14, this.bgmBus);
+    else {
+      this.tone(root + 7, when, BEAT * 0.4, "triangle", 0.055, this.bgmBus);
+      this.tone(root + 12, when, BEAT * 0.4, "triangle", 0.05, this.bgmBus);
+      this.tone(root + 16, when, BEAT * 0.4, "triangle", 0.04, this.bgmBus);
+    }
+    const notes = this.melodyAt.get(beat);
+    if (notes) for (const [m, d] of notes) this.calliope(m, when, d * BEAT);
+  }
+
+  calliope(midi, when, dur) {
+    const ctx = this.ctx;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(0.11, when + 0.02);
+    g.gain.setValueAtTime(0.11, when + Math.max(0.03, dur - 0.05));
+    g.gain.linearRampToValueAtTime(0, when + dur);
+    g.connect(this.bgmBus);
+    const lfo = ctx.createOscillator(); lfo.frequency.value = 5.5;
+    const lfoG = ctx.createGain(); lfoG.gain.value = 9;
+    lfo.connect(lfoG);
+    for (const [type, vol] of [["square", 0.35], ["triangle", 0.8]]) {
+      const o = ctx.createOscillator();
+      o.type = type; o.frequency.value = midiHz(midi);
+      lfoG.connect(o.detune);
+      const og = ctx.createGain(); og.gain.value = vol;
+      o.connect(og); og.connect(g);
+      o.start(when); o.stop(when + dur + 0.02);
+    }
+    lfo.start(when); lfo.stop(when + dur + 0.02);
+  }
+
+  tone(midi, when, dur, type, vol, bus) {
+    const ctx = this.ctx;
+    const o = ctx.createOscillator();
+    o.type = type; o.frequency.value = midiHz(midi);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(vol, when);
+    g.gain.exponentialRampToValueAtTime(0.001, when + dur);
+    o.connect(g); g.connect(bus);
+    o.start(when); o.stop(when + dur + 0.02);
+  }
+
+  /* ————— synth: rising spin tension ————— */
+  startSynthSpin() {
+    const ctx = this.ctx;
+    const dur = this.spinDuration || 6;
+    this.spinBus.gain.setTargetAtTime(0.9, ctx.currentTime, 0.1);
+    // riser noise sweep
+    const src = ctx.createBufferSource(); src.buffer = this.noiseBuf; src.loop = true;
+    const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 1.2;
+    bp.frequency.setValueAtTime(250, ctx.currentTime);
+    bp.frequency.exponentialRampToValueAtTime(3800, ctx.currentTime + dur);
+    const rg = ctx.createGain();
+    rg.gain.setValueAtTime(0.001, ctx.currentTime);
+    rg.gain.exponentialRampToValueAtTime(0.09, ctx.currentTime + dur);
+    src.connect(bp); bp.connect(rg); rg.connect(this.spinBus);
+    src.start(); this.spinNodes.push(src);
+
+    let next = ctx.currentTime + 0.05;
+    let step = 0;
+    const start = ctx.currentTime;
+    this.spinTimer = setInterval(() => {
+      while (next < ctx.currentTime + 0.3) {
+        const prog = Math.min((next - start) / dur, 1);
+        const beatDur = 0.24 - 0.13 * prog;
+        const root = 60 + Math.floor(step / 4);
+        const arp = [0, 4, 7, 12][step % 4];
+        this.tone(root + arp, next, beatDur * 0.9, "sawtooth", 0.05, this.spinBus);
+        if (step % 2 === 0) this.kick(next);
+        else this.snare(next, 0.05 + 0.05 * prog);
+        step++;
+        next += beatDur;
+      }
+    }, 80);
+  }
+
+  kick(when) {
+    const ctx = this.ctx;
+    const o = ctx.createOscillator();
+    o.frequency.setValueAtTime(150, when);
+    o.frequency.exponentialRampToValueAtTime(45, when + 0.12);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.22, when);
+    g.gain.exponentialRampToValueAtTime(0.001, when + 0.14);
+    o.connect(g); g.connect(this.spinBus);
+    o.start(when); o.stop(when + 0.16);
+  }
+
+  snare(when, vol) {
+    const ctx = this.ctx;
+    const s = ctx.createBufferSource(); s.buffer = this.noiseBuf;
+    const f = ctx.createBiquadFilter(); f.type = "highpass"; f.frequency.value = 1800;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(vol, when);
+    g.gain.exponentialRampToValueAtTime(0.001, when + 0.09);
+    s.connect(f); f.connect(g); g.connect(this.spinBus);
+    s.start(when); s.stop(when + 0.1);
+  }
+
+  tick() {
+    if (!this.unlocked || this.muted) return;
+    const ctx = this.ctx;
+    const when = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = "square";
+    o.frequency.value = 1500 + Math.random() * 300;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.06, when);
+    g.gain.exponentialRampToValueAtTime(0.001, when + 0.035);
+    o.connect(g); g.connect(this.sfxBus);
+    o.start(when); o.stop(when + 0.05);
+  }
+
+  fanfare() {
+    if (!this.unlocked) return;
+    const ctx = this.ctx;
+    const t0 = ctx.currentTime + 0.02;
+    [72, 76, 79, 84].forEach((m, i) => {
+      this.brass(m, t0 + i * 0.13, 0.16, 0.1);
+    });
+    [84, 88, 91].forEach(m => this.brass(m, t0 + 0.55, 0.85, 0.07, true));
+    // cymbal
+    const s = ctx.createBufferSource(); s.buffer = this.noiseBuf;
+    const f = ctx.createBiquadFilter(); f.type = "highpass"; f.frequency.value = 6000;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.14, t0 + 0.55);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 1.5);
+    s.connect(f); f.connect(g); g.connect(this.sfxBus);
+    s.start(t0 + 0.55); s.stop(t0 + 1.6);
+    // crowd cheer swell
+    const c = ctx.createBufferSource(); c.buffer = this.noiseBuf; c.loop = true;
+    const cf = ctx.createBiquadFilter(); cf.type = "bandpass"; cf.frequency.value = 1100; cf.Q.value = 0.6;
+    const cg = ctx.createGain();
+    cg.gain.setValueAtTime(0.001, t0 + 0.4);
+    cg.gain.exponentialRampToValueAtTime(0.085, t0 + 0.9);
+    cg.gain.exponentialRampToValueAtTime(0.001, t0 + 2.2);
+    c.connect(cf); cf.connect(cg); cg.connect(this.sfxBus);
+    c.start(t0 + 0.4); c.stop(t0 + 2.3);
+  }
+
+  brass(midi, when, dur, vol, vibrato = false) {
+    const ctx = this.ctx;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(vol, when + 0.03);
+    g.gain.setValueAtTime(vol, when + dur - 0.08);
+    g.gain.linearRampToValueAtTime(0, when + dur);
+    const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 2600;
+    g.connect(lp); lp.connect(this.sfxBus);
+    for (const type of ["sawtooth", "square"]) {
+      const o = ctx.createOscillator();
+      o.type = type; o.frequency.value = midiHz(midi);
+      const og = ctx.createGain(); og.gain.value = type === "sawtooth" ? 0.7 : 0.3;
+      o.connect(og); og.connect(g);
+      if (vibrato) {
+        const l = ctx.createOscillator(); l.frequency.value = 6;
+        const lg = ctx.createGain(); lg.gain.value = 14;
+        l.connect(lg); lg.connect(o.detune);
+        l.start(when); l.stop(when + dur);
+      }
+      o.start(when); o.stop(when + dur + 0.02);
+    }
+  }
+}

@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#0d2b3a"/>
+  <g transform="translate(256 256) scale(0.78) translate(-256 -256)">
+    <circle cx="256" cy="256" r="240" fill="#12384a"/>
+    <polygon fill="#f8ecd0" points="256,20 316.9,49.4 374,49.4 405.5,102.9 462.6,132.3 462.6,193.1 492,256 462.6,318.9 462.6,379.7 405.5,409.1 374,462.6 316.9,462.6 256,492 195.1,462.6 138,462.6 106.5,409.1 49.4,379.7 49.4,318.9 20,256 49.4,193.1 49.4,132.3 106.5,102.9 138,49.4 195.1,49.4"/>
+    <circle cx="256" cy="256" r="200" fill="none" stroke="#17606f" stroke-width="16"/>
+    <circle cx="256" cy="256" r="185" fill="#e8404d"/>
+    <g>
+      <path d="M256 256 L256 106 A150 150 0 0 1 362.07 149.93 Z" fill="#e8404d"/>
+      <path d="M256 256 L362.07 149.93 A150 150 0 0 1 406 256 Z" fill="#fdf0d5"/>
+      <path d="M256 256 L406 256 A150 150 0 0 1 362.07 362.07 Z" fill="#e8404d"/>
+      <path d="M256 256 L362.07 362.07 A150 150 0 0 1 256 406 Z" fill="#fdf0d5"/>
+      <path d="M256 256 L256 406 A150 150 0 0 1 149.93 362.07 Z" fill="#e8404d"/>
+      <path d="M256 256 L149.93 362.07 A150 150 0 0 1 106 256 Z" fill="#fdf0d5"/>
+      <path d="M256 256 L106 256 A150 150 0 0 1 149.93 149.93 Z" fill="#e8404d"/>
+      <path d="M256 256 L149.93 149.93 A150 150 0 0 1 256 106 Z" fill="#fdf0d5"/>
+    </g>
+    <circle cx="256" cy="256" r="150" fill="none" stroke="#c93341" stroke-width="6"/>
+    <g fill="#f6b93b">
+      <circle cx="256" cy="60" r="13"/><circle cx="452" cy="256" r="13"/><circle cx="256" cy="452" r="13"/><circle cx="60" cy="256" r="13"/>
+      <circle cx="394.6" cy="117.4" r="13"/><circle cx="394.6" cy="394.6" r="13"/><circle cx="117.4" cy="394.6" r="13"/><circle cx="117.4" cy="117.4" r="13"/>
+    </g>
+    <g fill="#f7f3c1">
+      <circle cx="354" cy="86.3" r="13"/><circle cx="425.7" cy="158" r="13"/><circle cx="425.7" cy="354" r="13"/><circle cx="354" cy="425.7" r="13"/>
+      <circle cx="158" cy="425.7" r="13"/><circle cx="86.3" cy="354" r="13"/><circle cx="86.3" cy="158" r="13"/><circle cx="158" cy="86.3" r="13"/>
+    </g>
+    <polygon points="256,118 270,244 242,244" fill="#7a1f2b"/>
+    <circle cx="256" cy="256" r="60" fill="#17606f"/>
+    <circle cx="256" cy="256" r="50" fill="#7a1f2b"/>
+    <circle cx="256" cy="256" r="41" fill="#fdf0d5"/>
+    <text x="256" y="270" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="34" fill="#7a1f2b">GO</text>
+  </g>
+</svg>
