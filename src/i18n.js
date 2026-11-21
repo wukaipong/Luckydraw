@@ -96,7 +96,13 @@ export const STRINGS = {
     toastDup: "Skipped {n} duplicate entries",
     csvRank: "Rank",
     csvName: "Name",
-    csvTime: "Time"
+    csvTime: "Time",
+    account: "Account",
+    signIn: "Sign in with Google",
+    signOut: "Sign out",
+    signedIn: "Signed in as {name}",
+    signedOut: "Signed out",
+    loginFailed: "Google sign-in failed — please try again"
   },
   zh: {
     tagline: "馬戲團幸運大轉盤",
@@ -195,7 +201,13 @@ export const STRINGS = {
     toastDup: "已略過 {n} 個重複項目",
     csvRank: "名次",
     csvName: "名稱",
-    csvTime: "時間"
+    csvTime: "時間",
+    account: "帳戶",
+    signIn: "用 Google 登入",
+    signOut: "登出",
+    signedIn: "已登入：{name}",
+    signedOut: "已登出",
+    loginFailed: "Google 登入失敗——請再試一次"
   }
 };
 

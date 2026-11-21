@@ -6,6 +6,7 @@ import { AudioEngine } from "./audio.js";
 import { Fx, shake } from "./fx.js";
 import { Bridge } from "./bridge.js";
 import { initTvNav, focusWithin } from "./tvnav.js";
+import { initAuth, refreshAuth } from "./auth.js";
 
 const $ = id => document.getElementById(id);
 const els = {
@@ -31,6 +32,7 @@ const els = {
   langSelect: $("langSelect"), tvSelect: $("tvSelect"),
   metaCount: $("metaCount"), metaLast: $("metaLast"), mcpEndpoint: $("mcpEndpoint"),
   install: $("installBtn"),
+  auth: $("authSlot"),
   lamp: $("mcpLamp"), lampText: $("mcpLampText"), mcpDot: $("mcpDot"),
   keygen: $("keygenBtn"), keyOverlay: $("keyOverlay"), keyValue: $("keyValue"),
   keyCopy: $("keyCopyBtn"), keyClose: $("keyCloseBtn"),
@@ -611,6 +613,7 @@ els.langSelect.addEventListener("change", () => {
   renderTracks();
   refreshUI();
   updateMcpStatus();
+  refreshAuth();
   save();
 });
 
@@ -636,6 +639,9 @@ window.addEventListener("keydown", e => {
 const gesture = () => { audio.userGesture(); audio.setMuted(!state.settings.sound); };
 window.addEventListener("pointerdown", gesture);
 window.addEventListener("keydown", gesture);
+// TV remotes and some WebViews deliver a synthetic click with no pointerdown/keydown
+window.addEventListener("click", gesture, true);
+window.addEventListener("touchstart", gesture, { capture: true, passive: true });
 
 /* install prompt */
 let deferredPrompt = null;
@@ -895,6 +901,7 @@ renderTracks();
 refreshUI();
 updateMcpStatus();
 els.mcpEndpoint.textContent = bridge.url;
+initAuth(els.auth, { onNotify: msg => toast(msg) });
 if (isTv()) els.go.focus();
 
 if (import.meta.env.PROD && "serviceWorker" in navigator) {

@@ -114,6 +114,21 @@ body.no-lights .beam, body.no-lights .bulbwire { animation: none; opacity: .25; 
 .lamp { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; color: var(--pale); opacity: .9; }
 .lamp i { width: 10px; height: 10px; border-radius: 50%; background: #6b7c85; box-shadow: 0 0 0 2px rgba(255,255,255,.08); transition: background .3s, box-shadow .3s; }
 .lamp.online i { background: var(--success); box-shadow: 0 0 10px var(--success); }
+.auth-slot { display: inline-flex; align-items: center; }
+.user-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--navy-3); border: 2px solid var(--gold-deep);
+  border-radius: 999px; padding: 3px 5px 3px 3px;
+}
+.user-avatar { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; border: 1px solid var(--gold); flex: none; }
+.user-initial { display: inline-flex; align-items: center; justify-content: center; background: var(--teal); color: var(--cream); font-weight: 800; font-size: 14px; }
+.user-name { font-size: 13px; font-weight: 700; color: var(--cream); max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-out {
+  font-family: var(--font-body); font-weight: 700; font-size: 12px; color: var(--pale);
+  background: transparent; border: 1px solid var(--teal); border-radius: 999px;
+  padding: 3px 9px; cursor: pointer; transition: background .15s, border-color .15s, color .15s;
+}
+.user-out:hover { background: var(--red-deep); border-color: var(--red); color: var(--cream); }
 .hidden { display: none !important; }
 
 /* ————— tent valance + bulb wire ————— */
@@ -636,6 +651,7 @@ textarea:focus { border-color: var(--red); border-style: solid; box-shadow: 0 0 
   .lamp span { display: none; }
   .top-btn { padding: 6px 10px; font-size: 12px; }
   #soundLabel { display: none; }
+  .user-name { display: none; }
   .curtain { display: none; }
   .wc-actions .btn { flex: 1; }
 }
@@ -649,6 +665,9 @@ body.tv .top-btn { padding: 12px 18px; font-size: 17px; border-radius: 14px; }
 body.tv .top-btn svg { width: 26px; height: 26px; }
 body.tv .lamp { font-size: 15px; }
 body.tv .lamp span { display: none; }
+body.tv .user-avatar { width: 38px; height: 38px; }
+body.tv .user-name { font-size: 17px; max-width: 220px; }
+body.tv .user-out { font-size: 15px; padding: 6px 14px; }
 body.tv main { padding-left: 5vw; padding-right: 5vw; }
 body.tv #wheelWrap {
   width: min(80vmin, calc(100vh - var(--header-h) - var(--valance-h) - 215px));

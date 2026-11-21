@@ -7,3 +7,5 @@ android/debug.keystore
 apk/*.idsig
 mcp/api-keys.json
 vibe_images/
+.env
+.env.*.local

@@ -30,6 +30,8 @@ export class AudioEngine {
     this.failed = { bgm: false, spin: false, win: false };
     // playVideo() outside a user gesture can be refused; blocked slots fall back to synth and retry on the next gesture
     this.blocked = { bgm: false, spin: false, win: false };
+    // muted autoplay is allowed before any gesture; the first gesture unmutes these slots
+    this.autoMuted = { bgm: false, spin: false, win: false };
     this.watchTimer = null;
     this.desired = "bgm";
     this.bgmTimer = null;
@@ -87,6 +89,8 @@ export class AudioEngine {
         source: this.slots[slot] ? this.slots[slot].kind : "synth",
         failed: this.failed[slot],
         blocked: this.blocked[slot],
+        autoMuted: this.autoMuted[slot],
+        muted: c && c.kind === "youtube" && c.ready ? c.player.isMuted() : null,
         ready: c ? (c.kind === "youtube" ? c.ready : true) : true,
         playerState: c && c.kind === "youtube" && c.ready ? c.player.getPlayerState() : null,
         videoId: c && c.kind === "youtube" ? c.videoId : null,
@@ -98,6 +102,7 @@ export class AudioEngine {
 
   setMuted(m) {
     this.muted = m;
+    if (!m) for (const slot of Object.keys(this.autoMuted)) this.autoMuted[slot] = false;
     if (this.ctx) this.master.gain.setTargetAtTime(m ? 0 : 1, this.ctx.currentTime, 0.05);
     for (const slot of Object.keys(this.custom)) {
       const c = this.custom[slot];
@@ -118,6 +123,7 @@ export class AudioEngine {
     this.slots[slot] = spec || null;
     this.failed[slot] = false;
     this.blocked[slot] = false;
+    this.autoMuted[slot] = false;
     if (spec && spec.kind === "audio") {
       const el = new Audio(spec.url);
       el.loop = true;
@@ -198,13 +204,13 @@ export class AudioEngine {
   }
 
   route() {
-    if (!this.unlocked) return;
     this.stopAll();
     const slot = this.desired;
     if (this.slots[slot] && this.slots[slot].kind === "off") return;
     const c = this.custom[slot];
     if (c && !this.failed[slot] && !this.blocked[slot]) {
       if (c.kind === "audio") {
+        if (!this.unlocked) return;
         c.el.currentTime = 0;
         c.el.play().catch(() => {
           if (this.custom[slot] !== c || this.desired !== slot) return;
@@ -214,6 +220,16 @@ export class AudioEngine {
         return;
       }
       if (c.kind === "youtube" && c.ready) {
+        if (!this.unlocked) {
+          // no gesture yet: unmuted autoplay would be refused, so run muted and unmute on the first gesture
+          c.player.mute();
+          this.autoMuted[slot] = true;
+          try { c.player.seekTo(0, true); } catch {}
+          c.player.playVideo();
+          this.watchPlayback(slot);
+          return;
+        }
+        if (!this.muted && this.autoMuted[slot]) { c.player.unMute(); c.player.setVolume(70); this.autoMuted[slot] = false; }
         try { c.player.seekTo(0, true); } catch {}
         c.player.playVideo();
         this.watchPlayback(slot);
@@ -221,6 +237,7 @@ export class AudioEngine {
       }
       // custom source still loading: keep the show audible with the synth meanwhile
     }
+    if (!this.unlocked) return;
     if (slot === "bgm") this.startSynthBgm();
     else if (slot === "spin") this.startSynthSpin();
     else if (slot === "win") this.startSynthWin();
@@ -234,6 +251,7 @@ export class AudioEngine {
       const st = c.player.getPlayerState();
       if (st === 1 || st === 3) return;
       this.blocked[slot] = true;
+      this.autoMuted[slot] = false;
       this.route();
     }, 900);
   }
@@ -246,6 +264,7 @@ export class AudioEngine {
     const c = this.custom[slot];
     if (!c || this.failed[slot]) return;
     if (c.kind === "youtube" && c.ready) {
+      if (this.autoMuted[slot] && !this.muted) { c.player.unMute(); c.player.setVolume(70); this.autoMuted[slot] = false; }
       const st = c.player.getPlayerState();
       if (st !== 1 && st !== 3) { c.player.playVideo(); this.watchPlayback(slot); }
     } else if (c.kind === "audio" && c.el.paused) {
