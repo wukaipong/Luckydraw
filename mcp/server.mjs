@@ -10,6 +10,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { verifyKey, generateKey, listKeys, revokeKeyById } from "./keys.mjs";
+import { getTracks, addTrack, removeTrack, renameTrack } from "./tracks.mjs";
 
 if (!verifyKey(process.env.LUCKYDRAW_API_KEY)) {
   console.error("[luckydraw] MCP requires a valid API key.");
@@ -189,9 +190,15 @@ const httpServer = http.createServer(async (req, res) => {
 });
 
 let appSocket = null;
+const appSockets = new Set();
 const pending = new Map();
 let reqId = 0;
 let lastEvents = [];
+
+function broadcastTracks() {
+  const msg = JSON.stringify({ type: "tracks_changed", tracks: getTracks() });
+  for (const ws of appSockets) if (ws.readyState === 1) ws.send(msg);
+}
 
 const wss = new WebSocketServer({ server: httpServer });
 wss.on("connection", (ws, req) => {
@@ -204,7 +211,29 @@ wss.on("connection", (ws, req) => {
     try { msg = JSON.parse(raw.toString()); } catch { return; }
     if (msg.type === "hello" && msg.role === "app") {
       appSocket = ws;
+      appSockets.add(ws);
       console.error(`[luckydraw] PWA connected`);
+      return;
+    }
+    if (msg.type === "request" && ["get_tracks", "track_add", "track_remove", "track_rename"].includes(msg.name)) {
+      const reply = ok => ws.send(JSON.stringify({ type: "response", id: msg.id, ...ok }));
+      try {
+        if (msg.name === "get_tracks") {
+          reply({ ok: true, data: { tracks: getTracks() } });
+        } else if (msg.name === "track_add") {
+          const tracks = addTrack(msg.args?.track);
+          broadcastTracks();
+          reply({ ok: true, data: { tracks } });
+        } else if (msg.name === "track_remove") {
+          const tracks = removeTrack(String(msg.args?.id || ""));
+          broadcastTracks();
+          reply({ ok: true, data: { tracks } });
+        } else {
+          const tracks = renameTrack(String(msg.args?.id || ""), msg.args?.name);
+          broadcastTracks();
+          reply({ ok: true, data: { tracks } });
+        }
+      } catch (err) { reply({ ok: false, error: String(err.message || err) }); }
       return;
     }
     if (msg.type === "request" && ["generate_api_key", "list_api_keys", "revoke_api_key"].includes(msg.name)) {
@@ -259,6 +288,7 @@ wss.on("connection", (ws, req) => {
     }
   });
   ws.on("close", () => {
+    appSockets.delete(ws);
     if (appSocket === ws) appSocket = null;
     console.error(`[luckydraw] PWA disconnected`);
   });

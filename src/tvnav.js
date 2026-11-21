@@ -56,7 +56,7 @@ export function initTvNav({ isTv, getScope, onBack }) {
     const type = active?.type;
     const horizontal = e.key === "ArrowLeft" || e.key === "ArrowRight";
     const native = tag === "TEXTAREA" ||
-      (tag === "INPUT" && (type === "range" || type === "number" || type === "text") && horizontal);
+      (tag === "INPUT" && (type === "range" || type === "number" || type === "text" || type === "password") && horizontal);
     const isBack = e.key === "Escape" || e.keyCode === 4 || e.key === "GoBack" || e.key === "BrowserBack" ||
       (e.key === "Backspace" && !native);
     if (isBack) {

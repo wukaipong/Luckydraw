@@ -6,6 +6,7 @@ android/build/
 android/debug.keystore
 apk/*.idsig
 mcp/api-keys.json
+mcp/tracks.json
 vibe_images/
 .env
 .env.*.local

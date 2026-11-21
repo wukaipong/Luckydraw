@@ -1,7 +1,8 @@
 export class Bridge {
-  constructor({ onCommand, onStatus }) {
+  constructor({ onCommand, onStatus, onTracks }) {
     this.onCommand = onCommand;
     this.onStatus = onStatus;
+    this.onTracks = onTracks || (() => {});
     this.ws = null;
     this.retry = 1000;
     this.reqId = 0;
@@ -37,6 +38,7 @@ export class Bridge {
         }
         return;
       }
+      if (msg.type === "tracks_changed") { this.onTracks(msg.tracks); return; }
       if (msg.type !== "command") return;
       try {
         const data = await this.onCommand(msg.name, msg.args || {});

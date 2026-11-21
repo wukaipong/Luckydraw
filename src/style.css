@@ -787,6 +787,7 @@ body.tv .key-name { font-size: 16px; }
 body.tv .key-row code { font-size: 13px; padding: 4px 10px; }
 body.tv .key-remove { font-size: 14px; padding: 8px 16px; }
 body.tv #keyNameInput, body.tv #adminPinInput { font-size: 17px; padding: 14px 16px; }
+body.tv #keyCard .edit-wrap:not(.editing) > input { padding-right: 52px; }
 body.tv textarea { font-size: 16px; }
 body.tv .btn { font-size: 16px; padding: 12px 22px; }
 body.tv .btn.small { font-size: 14px; padding: 9px 16px; }

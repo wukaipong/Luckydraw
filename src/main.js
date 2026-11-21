@@ -49,6 +49,8 @@ const els = {
 setLang(state.settings.lang);
 const wheel = new Wheel(els.wheel);
 const audio = new AudioEngine();
+window.__ldSuspendAudio = () => audio.suspend();
+window.__ldResumeAudio = () => audio.resume();
 const fx = new Fx($("dust"), $("confetti"));
 wheel.setItems(state.participants);
 audio.muted = !state.settings.sound;
@@ -200,11 +202,13 @@ function applyTv() {
 }
 initTvNav({
   isTv,
-  getScope: () => settingsOpen ? els.settingsPage
+  getScope: () => !els.keyOverlay.classList.contains("hidden") ? els.keyOverlay
+    : settingsOpen ? els.settingsPage
     : !els.overlay.classList.contains("hidden") ? els.overlay
     : document,
   onBack: () => {
-    if (settingsOpen) closeSettings();
+    if (!els.keyOverlay.classList.contains("hidden")) cancelKeyOverlay();
+    else if (settingsOpen) closeSettings();
     else if (!els.overlay.classList.contains("hidden")) cancelReveal();
   }
 });
@@ -271,6 +275,8 @@ guardInput(els.trackUrl);
 guardInput(els.trackName);
 guardInput(els.rangeMin);
 guardInput(els.rangeMax);
+const keyNameLock = guardInput(els.keyNameInput);
+const adminPinLock = guardInput(els.adminPinInput);
 
 function cancelReveal() {
   els.overlay.classList.add("hidden");
@@ -328,6 +334,7 @@ function ensureAudioTrack(url, name = "") {
     };
     tracks().push(tr);
     save();
+    trackOp("track_add", { track: tr });
   }
   return tr;
 }
@@ -341,6 +348,7 @@ function fetchTitle(tr) {
       if (j && j.title && !tr.name) {
         tr.name = String(j.title).slice(0, 80);
         save(); syncMusicUI();
+        trackOp("track_rename", { id: tr.id, name: tr.name });
         const inp = els.trackList.querySelector(`input[data-track="${tr.id}"]`);
         if (inp && document.activeElement !== inp && !inp.value) inp.value = tr.name;
       }
@@ -351,7 +359,7 @@ function fetchTitle(tr) {
 
 function ensureTrack(videoId) {
   let tr = trackByVideo(videoId);
-  if (!tr) { tr = { id: newTrackId(), name: "", videoId }; tracks().push(tr); save(); }
+  if (!tr) { tr = { id: newTrackId(), name: "", videoId }; tracks().push(tr); save(); trackOp("track_add", { track: tr }); }
   if (!tr.name) fetchTitle(tr);
   return tr;
 }
@@ -364,13 +372,14 @@ async function addTrack(source, name = "") {
   if (m) {
     const existing = trackByVideo(m[1]);
     if (existing) {
-      if (cleanName && !existing.name) { existing.name = cleanName; save(); }
+      if (cleanName && !existing.name) { existing.name = cleanName; save(); trackOp("track_rename", { id: existing.id, name: cleanName }); }
       syncMusicUI(); renderTracks();
       return { track: existing, dup: true };
     }
     const tr = { id: newTrackId(), name: cleanName, kind: "youtube", videoId: m[1] };
     tracks().push(tr);
     save();
+    trackOp("track_add", { track: tr });
     if (!tr.name) fetchTitle(tr);
     syncMusicUI(); renderTracks();
     return { track: tr, dup: false };
@@ -378,7 +387,7 @@ async function addTrack(source, name = "") {
   if (/^https?:\/\//i.test(s)) {
     const existing = tracks().find(tr => tr.url === s);
     if (existing) {
-      if (cleanName && !existing.name) { existing.name = cleanName; save(); }
+      if (cleanName && !existing.name) { existing.name = cleanName; save(); trackOp("track_rename", { id: existing.id, name: cleanName }); }
       syncMusicUI(); renderTracks();
       return { track: existing, dup: true };
     }
@@ -391,7 +400,7 @@ async function addTrack(source, name = "") {
   const url = "/music/" + encodeURIComponent(file);
   const existing = tracks().find(tr => tr.url === url);
   if (existing) {
-    if (cleanName && !existing.name) { existing.name = cleanName; save(); }
+    if (cleanName && !existing.name) { existing.name = cleanName; save(); trackOp("track_rename", { id: existing.id, name: cleanName }); }
     syncMusicUI(); renderTracks();
     return { track: existing, dup: true };
   }
@@ -407,6 +416,7 @@ function renameTrack(id, name) {
   if (!tr) throw new Error("Unknown track");
   tr.name = String(name).trim().slice(0, 80);
   save(); syncMusicUI();
+  trackOp("track_rename", { id, name: tr.name });
   return tr;
 }
 
@@ -427,7 +437,40 @@ function removeTrack(id) {
     }
   }
   save(); syncMusicUI(); renderTracks();
+  trackOp("track_remove", { id });
   return { removed: tr, resetSlots };
+}
+
+/* ————— shared track library: server is the source of truth when online ————— */
+function trackOp(name, args) {
+  if (mcpOnline) bridge.request(name, args).catch(() => {});
+}
+
+async function syncTracks() {
+  try {
+    let { tracks: lib } = await bridge.request("get_tracks");
+    for (const tr of tracks()) {
+      const known = lib.some(s => s.id === tr.id || (tr.url && s.url === tr.url) || (tr.videoId && s.videoId === tr.videoId));
+      if (!known) ({ tracks: lib } = await bridge.request("track_add", { track: tr }));
+    }
+    adoptTracks(lib);
+  } catch { /* offline: keep the local library */ }
+}
+
+function adoptTracks(list) {
+  if (!Array.isArray(list)) return;
+  state.settings.tracks = list.filter(tr => tr && tr.id && (tr.url || tr.videoId));
+  for (const slot of MUSIC_SLOTS) {
+    const spec = state.settings.music[slot];
+    if (!spec || (spec.kind !== "youtube" && spec.kind !== "audio")) continue;
+    const exists = (spec.trackId && trackById(spec.trackId)) ||
+      (spec.videoId && trackByVideo(spec.videoId)) ||
+      (spec.url && tracks().find(x => x.url === spec.url));
+    if (!exists) applyMusic(slot, null);
+    else if (spec.trackId !== exists.id) { spec.trackId = exists.id; }
+  }
+  save(); syncMusicUI();
+  if (!els.trackList.contains(document.activeElement)) renderTracks();
 }
 
 function renderTracks() {
@@ -754,7 +797,8 @@ els.tvSelect.addEventListener("change", () => {
 
 /* keyboard */
 window.addEventListener("keydown", e => {
-  if (e.key === "Escape" && !els.keyOverlay.classList.contains("hidden")) { closeKeyOverlay(); return; }
+  if (e.defaultPrevented) return;
+  if (e.key === "Escape" && !els.keyOverlay.classList.contains("hidden")) { cancelKeyOverlay(); return; }
   if (e.key === "Escape" && settingsOpen) { closeSettings(); return; }
   const tag = document.activeElement?.tagName;
   if (tag === "TEXTAREA" || tag === "INPUT" || tag === "SELECT") return;
@@ -907,7 +951,8 @@ const commands = {
 };
 
 const bridge = new Bridge({
-  onStatus: online => { mcpOnline = online; updateMcpStatus(); if (online && settingsOpen) refreshKeyList(); },
+  onStatus: online => { mcpOnline = online; updateMcpStatus(); if (online) { syncTracks(); if (settingsOpen) refreshKeyList(); } },
+  onTracks: list => adoptTracks(list),
   onCommand: (name, args) => {
     const fn = commands[name];
     if (!fn) throw new Error(`Unknown command: ${name}`);
@@ -943,7 +988,7 @@ function askPin(errorText = "") {
   els.keyResultStage.classList.add("hidden");
   els.adminPinStage.classList.remove("hidden");
   els.keyOverlay.classList.remove("hidden");
-  els.adminPinInput.focus();
+  (isTv() ? adminPinLock.btn : els.adminPinInput).focus();
   return new Promise(resolve => { pinResolve = resolve; });
 }
 function settlePin(value) {
@@ -1020,7 +1065,14 @@ async function refreshKeyList() {
   }
 }
 
-function closeKeyOverlay() { els.keyOverlay.classList.add("hidden"); }
+function closeKeyOverlay() {
+  els.keyOverlay.classList.add("hidden");
+  if (isTv() && settingsOpen) els.keygen.focus();
+}
+function cancelKeyOverlay() {
+  if (!els.adminPinStage.classList.contains("hidden")) settlePin(null);
+  closeKeyOverlay();
+}
 
 els.keygen.addEventListener("click", () => {
   if (!mcpOnline) { toast(t("keygenOffline")); return; }
@@ -1029,12 +1081,12 @@ els.keygen.addEventListener("click", () => {
   els.keyNameStage.classList.remove("hidden");
   els.keyResultStage.classList.add("hidden");
   els.keyOverlay.classList.remove("hidden");
-  els.keyNameInput.focus();
+  (isTv() ? keyNameLock.btn : els.keyNameInput).focus();
 });
 
 async function createKey() {
   const label = els.keyNameInput.value.trim();
-  if (!label) { toast(t("keyNameRequired")); els.keyNameInput.focus(); return; }
+  if (!label) { toast(t("keyNameRequired")); (isTv() ? keyNameLock.btn : els.keyNameInput).focus(); return; }
   els.keyCreate.disabled = true;
   try {
     const data = await adminRequest("generate_api_key", { label });
@@ -1061,7 +1113,7 @@ els.keyNameInput.addEventListener("keydown", e => {
 });
 els.adminPinSubmit.addEventListener("click", () => {
   const pin = els.adminPinInput.value.trim();
-  if (!pin) { els.adminPinInput.focus(); return; }
+  if (!pin) { (isTv() ? adminPinLock.btn : els.adminPinInput).focus(); return; }
   els.adminPinStage.classList.add("hidden");
   settlePin(pin);
 });
