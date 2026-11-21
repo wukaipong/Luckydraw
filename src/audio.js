@@ -90,10 +90,13 @@ export class AudioEngine {
         failed: this.failed[slot],
         blocked: this.blocked[slot],
         autoMuted: this.autoMuted[slot],
-        muted: c && c.kind === "youtube" && c.ready ? c.player.isMuted() : null,
+        muted: c ? (c.kind === "audio" ? c.el.muted : c.ready ? c.player.isMuted() : null) : null,
         ready: c ? (c.kind === "youtube" ? c.ready : true) : true,
         playerState: c && c.kind === "youtube" && c.ready ? c.player.getPlayerState() : null,
         videoId: c && c.kind === "youtube" ? c.videoId : null,
+        url: c && c.kind === "audio" ? c.el.src : null,
+        time: c && c.kind === "audio" ? c.el.currentTime : null,
+        playError: this.playErr && this.playErr.slot === slot ? this.playErr.name : null,
         loop: c ? (c.kind === "audio" ? c.el.loop : c.ready ? c.loop : null) : null
       };
     }
@@ -134,6 +137,7 @@ export class AudioEngine {
         if (this.unlocked && this.desired === slot) this.route();
       });
       this.custom[slot] = { kind: "audio", el };
+      if (!this.unlocked && this.desired === slot) this.route();
     } else if (spec && spec.kind === "youtube") {
       const entry = { kind: "youtube", videoId: spec.videoId, ready: false, player: null, loop: true };
       this.custom[slot] = entry;
@@ -210,11 +214,20 @@ export class AudioEngine {
     const c = this.custom[slot];
     if (c && !this.failed[slot] && !this.blocked[slot]) {
       if (c.kind === "audio") {
-        if (!this.unlocked) return;
+        if (!this.unlocked) {
+          // muted autoplay is allowed before any gesture; the first gesture unmutes
+          c.el.muted = true;
+          this.autoMuted[slot] = true;
+        } else if (!this.muted && this.autoMuted[slot]) {
+          c.el.muted = false;
+          this.autoMuted[slot] = false;
+        }
         c.el.currentTime = 0;
-        c.el.play().catch(() => {
+        c.el.play().catch(err => {
+          this.playErr = { slot, name: err && err.name };
           if (this.custom[slot] !== c || this.desired !== slot) return;
           this.blocked[slot] = true;
+          this.autoMuted[slot] = false;
           this.route();
         });
         return;
@@ -267,8 +280,9 @@ export class AudioEngine {
       if (this.autoMuted[slot] && !this.muted) { c.player.unMute(); c.player.setVolume(70); this.autoMuted[slot] = false; }
       const st = c.player.getPlayerState();
       if (st !== 1 && st !== 3) { c.player.playVideo(); this.watchPlayback(slot); }
-    } else if (c.kind === "audio" && c.el.paused) {
-      c.el.play().catch(() => {});
+    } else if (c.kind === "audio") {
+      if (this.autoMuted[slot] && !this.muted) { c.el.muted = false; this.autoMuted[slot] = false; }
+      if (c.el.paused) c.el.play().catch(() => {});
     }
   }
 

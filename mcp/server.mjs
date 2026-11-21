@@ -118,6 +118,7 @@ const httpServer = http.createServer(async (req, res) => {
       "Content-Length": fs.statSync(file).size,
       "Accept-Ranges": "bytes"
     });
+    if (req.method === "HEAD") { res.end(); return; }
     fs.createReadStream(file).pipe(res);
     return;
   }
@@ -300,10 +301,10 @@ tool("set_music",
     return callApp("set_music", { slot, source: finalSource });
   });
 
-tool("list_tracks", "List the saved YouTube library (id, name, videoId). Every music slot can pick any of these tracks by name.", {},
+tool("list_tracks", "List the saved track library (id, name, kind: local/url/youtube, plus videoId or url). Every music slot can pick any of these tracks by name.", {},
   () => callApp("list_tracks"));
 
-tool("add_track", "Save a YouTube link into the named library so any music slot can select it. name is optional; empty names auto-fill from the video title.",
+tool("add_track", "Save a track into the named library so any music slot can select it: a file name inside the server's music/ folder, an http(s) audio URL, or a YouTube link. name is optional; empty names auto-fill from the file name or video title.",
   { url: z.string(), name: z.string().optional() },
   args => callApp("add_track", args));
 
@@ -311,7 +312,7 @@ tool("rename_track", "Rename a saved YouTube track (the name shown in every slot
   { id: z.string(), name: z.string() },
   args => callApp("rename_track", args));
 
-tool("remove_track", "Delete a saved YouTube track. Slots using it fall back to the circus synth.",
+tool("remove_track", "Delete a saved track (local, URL or YouTube). Slots using it fall back to the circus synth.",
   { id: z.string() },
   args => callApp("remove_track", args));
 

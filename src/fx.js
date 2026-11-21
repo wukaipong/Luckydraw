@@ -6,19 +6,38 @@ export class Fx {
     this.cc = confettiCanvas; this.cctx = confettiCanvas.getContext("2d");
     this.dust = [];
     this.confetti = [];
+    this.tv = document.body.classList.contains("tv");
+    this.maxConfetti = this.tv ? 240 : 900;
+    this.dustDirty = false;
+    this.confDirty = false;
     this.resize();
+    this.fillDust();
+  }
+
+  setTv(on) {
+    this.tv = on;
+    this.maxConfetti = on ? 240 : 900;
+    this.fillDust();
+    this.resize();
+  }
+
+  fillDust() {
+    this.dust = [];
+    if (this.tv) return;
     const n = Math.min(70, Math.floor(window.innerWidth / 18));
     for (let i = 0; i < n; i++) this.dust.push(this.newDust(true));
   }
 
   resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, this.tv ? 1 : 2);
     for (const [c, ctx] of [[this.dc, this.dctx], [this.cc, this.cctx]]) {
       c.width = Math.round(window.innerWidth * dpr);
       c.height = Math.round(window.innerHeight * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
     this.w = window.innerWidth; this.h = window.innerHeight;
+    this.dustDirty = true;
+    this.confDirty = true;
   }
 
   newDust(anywhere) {
@@ -34,6 +53,7 @@ export class Fx {
   }
 
   burst(x, y, count) {
+    if (this.tv) count = Math.round(count * 0.35);
     for (let i = 0; i < count; i++) {
       const a = Math.random() * Math.PI * 2;
       const sp = 260 + Math.random() * 620;
@@ -52,7 +72,7 @@ export class Fx {
         age: 0
       });
     }
-    if (this.confetti.length > 900) this.confetti.splice(0, this.confetti.length - 900);
+    if (this.confetti.length > this.maxConfetti) this.confetti.splice(0, this.confetti.length - this.maxConfetti);
   }
 
   cannons(count) {
@@ -63,8 +83,9 @@ export class Fx {
 
   render(now, dt, lightsOn) {
     const d = this.dctx;
-    d.clearRect(0, 0, this.w, this.h);
-    if (lightsOn) {
+    if (this.dust.length && lightsOn) {
+      d.clearRect(0, 0, this.w, this.h);
+      this.dustDirty = true;
       for (let i = 0; i < this.dust.length; i++) {
         const p = this.dust[i];
         p.y -= p.vy * dt; p.x += p.vx * dt; p.tw += p.ts * dt;
@@ -73,11 +94,18 @@ export class Fx {
         d.beginPath(); d.arc(p.x, p.y, p.r, 0, Math.PI * 2);
         d.fillStyle = `rgba(246,220,150,${a.toFixed(3)})`; d.fill();
       }
+    } else if (this.dustDirty) {
+      d.clearRect(0, 0, this.w, this.h);
+      this.dustDirty = false;
     }
 
     const c = this.cctx;
+    if (!this.confetti.length) {
+      if (this.confDirty) { c.clearRect(0, 0, this.w, this.h); this.confDirty = false; }
+      return;
+    }
     c.clearRect(0, 0, this.w, this.h);
-    if (!this.confetti.length) return;
+    this.confDirty = true;
     const g = 980, drag = 0.985;
     for (let i = this.confetti.length - 1; i >= 0; i--) {
       const p = this.confetti[i];

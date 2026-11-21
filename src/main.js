@@ -10,7 +10,8 @@ import { initAuth, refreshAuth } from "./auth.js";
 
 const $ = id => document.getElementById(id);
 const els = {
-  wheel: $("wheel"), go: $("goBtn"), stage: $("stage"), hint: $("stageHint"),
+  wheel: $("wheel"), go: $("goBtn"), goSub: $("goSub"), stage: $("stage"), hint: $("stageHint"),
+  meta: $("stageMeta"), topbar: $("topbar"),
   names: $("namesInput"), add: $("addBtn"), clear: $("clearBtn"),
   rangeMin: $("rangeMin"), rangeMax: $("rangeMax"), gen: $("genBtn"),
   chips: $("chips"), count: $("countBadge"),
@@ -89,6 +90,7 @@ function updateHint() {
   if (phase === "spinning") els.hint.textContent = t("hintSpinning");
   else if (phase === "revealed") els.hint.textContent = t("hintRevealed");
   else els.hint.textContent = n ? t(isTv() ? "hintIdleTv" : "hintIdle", { n }) : t("hintEmpty");
+  els.goSub.textContent = isTv() && phase === "idle" && n ? t("goSubTv") : "";
   els.go.disabled = phase === "spinning" || phase === "removing" || n === 0;
 }
 
@@ -148,8 +150,9 @@ function openSettings() {
   settingsOpen = true;
   lastFocus = document.activeElement;
   els.settingsScrim.classList.remove("hidden");
-  els.settingsPage.classList.remove("hidden");
-  requestAnimationFrame(() => els.settingsPage.classList.add("open"));
+  if (!isTv()) els.settingsPage.classList.remove("hidden");
+  if (isTv()) els.settingsPage.classList.add("open");
+  else requestAnimationFrame(() => els.settingsPage.classList.add("open"));
   focusWithin(els.settingsPage);
   refreshKeyList();
 }
@@ -158,8 +161,10 @@ function closeSettings() {
   settingsOpen = false;
   els.settingsPage.classList.remove("open");
   setTimeout(() => {
-    if (!settingsOpen) {
+    if (!settingsOpen && !isTv()) {
       els.settingsPage.classList.add("hidden");
+      els.settingsScrim.classList.add("hidden");
+    } else if (!settingsOpen) {
       els.settingsScrim.classList.add("hidden");
     }
   }, 320);
@@ -181,6 +186,12 @@ function applyTv() {
   const on = state.settings.tvMode === "on" || (state.settings.tvMode === "auto" && detectTv());
   const was = isTv();
   document.body.classList.toggle("tv", on);
+  if (on) els.settingsPage.classList.remove("hidden");
+  else if (!settingsOpen) els.settingsPage.classList.add("hidden");
+  fx.setTv(on);
+  wheel.resize();
+  if (on) els.topbar.insertBefore(els.meta, els.topbar.lastElementChild);
+  else els.stage.appendChild(els.meta);
   if (on && !was) els.go.focus();
   updateHint();
 }
@@ -230,7 +241,7 @@ function afterListChange() {
   bridge.event("participants_changed", { participants: state.participants });
 }
 
-/* ————— music sources + named YouTube library ————— */
+/* ————— music sources + named track library ————— */
 const MUSIC_SLOTS = ["bgm", "spin", "win"];
 const YT_RE = /(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([\w-]{6,20})/;
 const tracks = () => state.settings.tracks;
@@ -241,6 +252,25 @@ const trackByName = name => {
   return n ? tracks().find(tr => (tr.name || "").toLowerCase() === n) : undefined;
 };
 const newTrackId = () => "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const trackFile = tr => decodeURIComponent(String(tr.url || "").split("/").pop() || "");
+const trackLabel = tr => tr.name || (tr.kind === "youtube" ? tr.videoId : trackFile(tr));
+const trackKindTag = tr => (tr.kind === "youtube" ? "YouTube" : tr.kind === "url" ? t("kindUrl") : t("kindLocal"));
+
+function ensureAudioTrack(url, name = "") {
+  let tr = tracks().find(x => x.url === url);
+  if (!tr) {
+    const file = decodeURIComponent(url.split("/").pop() || url);
+    tr = {
+      id: newTrackId(),
+      name: name || file.replace(/\.[a-z0-9]+$/i, ""),
+      kind: /^https?:\/\//i.test(url) ? "url" : "local",
+      url
+    };
+    tracks().push(tr);
+    save();
+  }
+  return tr;
+}
 
 function fetchTitle(tr) {
   const ctl = new AbortController();
@@ -266,20 +296,48 @@ function ensureTrack(videoId) {
   return tr;
 }
 
-function addTrack(source, name = "") {
+async function addTrack(source, name = "") {
   const s = String(source).trim();
-  const m = s.match(YT_RE) || s.match(/^([\w-]{6,20})$/);
-  if (!m) throw new Error(t("trackBadUrl"));
-  const existing = trackByVideo(m[1]);
+  if (!s) throw new Error(t("trackBadUrl"));
+  const cleanName = name.trim().slice(0, 80);
+  const m = s.match(YT_RE) || (!/[\\/.]/.test(s) && !/^https?:/i.test(s) ? s.match(/^([\w-]{6,20})$/) : null);
+  if (m) {
+    const existing = trackByVideo(m[1]);
+    if (existing) {
+      if (cleanName && !existing.name) { existing.name = cleanName; save(); }
+      syncMusicUI(); renderTracks();
+      return { track: existing, dup: true };
+    }
+    const tr = { id: newTrackId(), name: cleanName, kind: "youtube", videoId: m[1] };
+    tracks().push(tr);
+    save();
+    if (!tr.name) fetchTitle(tr);
+    syncMusicUI(); renderTracks();
+    return { track: tr, dup: false };
+  }
+  if (/^https?:\/\//i.test(s)) {
+    const existing = tracks().find(tr => tr.url === s);
+    if (existing) {
+      if (cleanName && !existing.name) { existing.name = cleanName; save(); }
+      syncMusicUI(); renderTracks();
+      return { track: existing, dup: true };
+    }
+    const tr = ensureAudioTrack(s, cleanName);
+    syncMusicUI(); renderTracks();
+    return { track: tr, dup: false };
+  }
+  const file = s.replace(/^\/?music[\\/]/, "").split(/[\\/]/).pop();
+  if (!file || !/\.[a-z0-9]{2,5}$/i.test(file)) throw new Error(t("trackBadUrl"));
+  const url = "/music/" + encodeURIComponent(file);
+  const existing = tracks().find(tr => tr.url === url);
   if (existing) {
-    if (name.trim() && !existing.name) { existing.name = name.trim().slice(0, 80); save(); }
+    if (cleanName && !existing.name) { existing.name = cleanName; save(); }
     syncMusicUI(); renderTracks();
     return { track: existing, dup: true };
   }
-  const tr = { id: newTrackId(), name: name.trim().slice(0, 80), videoId: m[1] };
-  tracks().push(tr);
-  save();
-  if (!tr.name) fetchTitle(tr);
+  const probe = await fetch(url, { method: "HEAD" });
+  if (!probe.ok) throw new Error(t("trackNoFile", { file }));
+  const tr = ensureAudioTrack(url, cleanName);
   syncMusicUI(); renderTracks();
   return { track: tr, dup: false };
 }
@@ -299,7 +357,11 @@ function removeTrack(id) {
   const resetSlots = [];
   for (const slot of MUSIC_SLOTS) {
     const spec = state.settings.music[slot];
-    if (spec && spec.kind === "youtube" && (spec.trackId === id || spec.videoId === tr.videoId)) {
+    if (
+      spec &&
+      ((spec.kind === "youtube" && (spec.trackId === id || spec.videoId === tr.videoId)) ||
+        (spec.kind === "audio" && (spec.trackId === id || spec.url === tr.url)))
+    ) {
       applyMusic(slot, null);
       resetSlots.push(slot);
     }
@@ -318,21 +380,25 @@ function renderTracks() {
     inp.className = "track-name";
     inp.dataset.track = tr.id;
     inp.value = tr.name;
-    inp.placeholder = tr.videoId;
+    inp.placeholder = trackLabel(tr);
     inp.setAttribute("aria-label", t("trackNamePh"));
     inp.addEventListener("change", () => renameTrack(tr.id, inp.value));
+    const kind = document.createElement("span");
+    kind.className = "track-kind" + (tr.kind === "youtube" ? " yt" : tr.kind === "url" ? " url" : "");
+    kind.textContent = trackKindTag(tr);
     const vid = document.createElement("code");
     vid.className = "track-vid";
-    vid.textContent = tr.videoId;
+    vid.textContent = tr.kind === "youtube" ? tr.videoId : trackFile(tr);
+    vid.title = tr.kind === "youtube" ? tr.videoId : tr.url;
     const del = document.createElement("button");
     del.className = "track-del";
     del.textContent = "×";
-    del.setAttribute("aria-label", `${t("trackDel")}: ${tr.name || tr.videoId}`);
+    del.setAttribute("aria-label", `${t("trackDel")}: ${trackLabel(tr)}`);
     del.addEventListener("click", () => {
       const { resetSlots } = removeTrack(tr.id);
       toast(t("trackRemoved") + (resetSlots.length ? " · " + t("trackResetSlots") : ""));
     });
-    li.append(inp, vid, del);
+    li.append(inp, kind, vid, del);
     els.trackList.appendChild(li);
   }
 }
@@ -352,8 +418,8 @@ function syncMusicUI() {
     sel.textContent = "";
     for (const tr of tracks()) {
       const opt = document.createElement("option");
-      opt.value = "yt:" + tr.id;
-      opt.textContent = tr.name || tr.videoId;
+      opt.value = "tr:" + tr.id;
+      opt.textContent = tr.kind === "youtube" ? trackLabel(tr) : `${trackLabel(tr)} · ${trackKindTag(tr)}`;
       sel.appendChild(opt);
     }
     for (const o of ["synth", "custom", "off"]) {
@@ -365,13 +431,21 @@ function syncMusicUI() {
     }
     if (kind === "youtube") {
       const tr = (spec.trackId && trackById(spec.trackId)) || trackByVideo(spec.videoId);
-      sel.value = tr ? "yt:" + tr.id : "synth";
+      sel.value = tr ? "tr:" + tr.id : "synth";
+    } else if (kind === "custom") {
+      const tr = spec.trackId && trackById(spec.trackId);
+      sel.value = tr ? "tr:" + tr.id : "custom";
     } else sel.value = kind;
   }
 }
 
 function applyMusic(slot, spec) {
   if (spec && spec.kind === "youtube") spec = { ...spec, trackId: ensureTrack(spec.videoId).id };
+  if (spec && spec.kind === "audio") {
+    const u = new URL(spec.url, location.origin);
+    if (u.origin === location.origin) spec = { ...spec, url: u.pathname };
+    if (!spec.trackId) spec = { ...spec, trackId: ensureAudioTrack(spec.url).id };
+  }
   audio.setSource(slot, spec);
   state.settings.music[slot] = spec;
   save();
@@ -522,8 +596,7 @@ els.resetBtn.addEventListener("click", () => {
 /* settings */
 function syncSettingsUI() {
   els.duration.value = state.settings.duration;
-  els.durationVal.value = state.settings.duration;
-  els.durationVal.setAttribute("aria-label", t("spinDuration"));
+  els.durationVal.textContent = state.settings.duration;
   els.confetti.value = state.settings.confetti;
   els.confettiVal.textContent = state.settings.confetti;
   els.bulb.value = state.settings.bulbSpeed;
@@ -540,13 +613,6 @@ function syncSettingsUI() {
   els.tvSelect.value = state.settings.tvMode;
 }
 els.duration.addEventListener("input", () => { state.settings.duration = parseFloat(els.duration.value); syncSettingsUI(); save(); });
-els.durationVal.addEventListener("change", () => {
-  let v = parseFloat(els.durationVal.value);
-  if (!Number.isFinite(v)) v = state.settings.duration;
-  state.settings.duration = Math.min(12, Math.max(3, Math.round(v * 2) / 2));
-  syncSettingsUI();
-  save();
-});
 els.confetti.addEventListener("input", () => { state.settings.confetti = parseInt(els.confetti.value); syncSettingsUI(); save(); });
 els.bulb.addEventListener("input", () => { state.settings.bulbSpeed = parseFloat(els.bulb.value); syncSettingsUI(); save(); });
 els.light.addEventListener("change", () => { state.settings.lightShow = els.light.checked; syncSettingsUI(); save(); });
@@ -556,10 +622,12 @@ for (const slot of MUSIC_SLOTS) {
   els.music[slot].addEventListener("change", () => {
     const v = els.music[slot].value;
     let spec;
-    if (v.startsWith("yt:")) {
+    if (v.startsWith("tr:")) {
       const tr = trackById(v.slice(3));
       if (!tr) { syncMusicUI(); return; }
-      spec = { kind: "youtube", videoId: tr.videoId, trackId: tr.id };
+      spec = tr.kind === "youtube"
+        ? { kind: "youtube", videoId: tr.videoId, trackId: tr.id }
+        : { kind: "audio", url: tr.url, trackId: tr.id };
     } else if (v === "off") spec = { kind: "off" };
     else if (v === "synth") spec = null;
     else {
@@ -572,15 +640,17 @@ for (const slot of MUSIC_SLOTS) {
   });
 }
 
-els.trackAdd.addEventListener("click", () => {
+els.trackAdd.addEventListener("click", async () => {
   const url = els.trackUrl.value.trim();
   if (!url) { toast(t("trackBadUrl")); return; }
+  els.trackAdd.disabled = true;
   try {
-    const { track, dup } = addTrack(url, els.trackName.value);
+    const { track, dup } = await addTrack(url, els.trackName.value);
     els.trackUrl.value = "";
     els.trackName.value = "";
-    toast(dup ? t("trackDup") : t("trackAdded", { name: track.name || track.videoId }));
+    toast(dup ? t("trackDup") : t("trackAdded", { name: trackLabel(track) }));
   } catch (e) { toast(e.message); }
+  els.trackAdd.disabled = false;
 });
 for (const inp of [els.trackUrl, els.trackName]) {
   inp.addEventListener("keydown", e => {
@@ -669,18 +739,22 @@ function parseMusicSource(source) {
   if (!source || source === "synth" || source === "default") return null;
   if (source === "off" || source === "none" || source === "silent") return { kind: "off" };
   const s = String(source).trim();
+  const specFor = tr => (tr.kind === "youtube"
+    ? { kind: "youtube", videoId: tr.videoId, trackId: tr.id }
+    : { kind: "audio", url: tr.url, trackId: tr.id });
   if (s.startsWith("track:")) {
     const tr = trackById(s.slice(6));
     if (!tr) throw new Error("Unknown track id");
-    return { kind: "youtube", videoId: tr.videoId, trackId: tr.id };
+    return specFor(tr);
   }
   const named = trackByName(s);
-  if (named) return { kind: "youtube", videoId: named.videoId, trackId: named.id };
+  if (named) return specFor(named);
   const yt = s.match(YT_RE);
   if (yt) return { kind: "youtube", videoId: yt[1] };
-  if (s.startsWith("/")) return { kind: "audio", url: new URL(s, location.origin).href };
+  if (s.startsWith("/")) return { kind: "audio", url: s };
   if (/^https?:\/\//.test(s)) return { kind: "audio", url: s };
-  throw new Error("source must be 'synth', 'off', a saved track name, an http(s) audio URL, or a YouTube link");
+  if (/\.[a-z0-9]{2,5}$/i.test(s) && !/[\\/]/.test(s)) return { kind: "audio", url: "/music/" + encodeURIComponent(s) };
+  throw new Error("source must be 'synth', 'off', a saved track name, a file name in music/, an http(s) audio URL, or a YouTube link");
 }
 
 const commands = {
@@ -749,8 +823,8 @@ const commands = {
     return { slot, source: spec && spec.kind === "off" ? "off" : spec || "synth" };
   },
   list_tracks: () => ({ tracks: tracks() }),
-  add_track: ({ url, name }) => {
-    const { track, dup } = addTrack(url, name || "");
+  add_track: async ({ url, name }) => {
+    const { track, dup } = await addTrack(url, name || "");
     return { track, alreadyInLibrary: dup };
   },
   rename_track: ({ id, name }) => ({ track: renameTrack(id, name) }),
@@ -872,12 +946,24 @@ els.keyCancel.addEventListener("click", closeKeyOverlay);
 
 /* ————— render loop ————— */
 let last = performance.now();
+let frameEma = 16, frameN = 0, degraded = false, tvGap = 32;
 function loop(now) {
-  const dt = Math.min((now - last) / 1000, 0.05);
+  requestAnimationFrame(loop);
+  const gap = now - last;
+  // 30fps ceiling on TV: half the paint work of 60Hz with no perceptible loss at 10 feet
+  if (isTv() && gap < tvGap) return;
+  const dt = Math.min(gap / 1000, 0.05);
   last = now;
   wheel.render(now, dt, { bulbSpeed: state.settings.bulbSpeed, lightShow: state.settings.lightShow });
   fx.render(now, dt, state.settings.lightShow);
-  requestAnimationFrame(loop);
+  if (isTv() && !degraded) {
+    frameEma = frameEma * 0.9 + gap * 0.1;
+    if (++frameN > 120 && frameEma > 45) {
+      degraded = true;
+      tvGap = 40;
+      fx.maxConfetti = 120;
+    }
+  }
 }
 requestAnimationFrame(loop);
 
@@ -886,12 +972,18 @@ window.addEventListener("resize", () => { wheel.resize(); fx.resize(); });
 /* ————— boot ————— */
 for (const slot of MUSIC_SLOTS) {
   let spec = state.settings.music[slot];
-  if (spec && spec.kind === "audio" && /^http:\/\/localhost:\d+\/music\//.test(spec.url) && !spec.url.startsWith(location.origin + "/")) {
-    spec = { kind: "audio", url: new URL(new URL(spec.url).pathname, location.origin).href };
-    state.settings.music[slot] = spec;
+  if (spec && spec.kind === "audio") {
+    const u = new URL(spec.url, location.origin);
+    if (u.origin === location.origin) spec = { ...spec, url: u.pathname };
+    if (!spec.trackId) spec = { ...spec, trackId: ensureAudioTrack(spec.url).id };
+    else {
+      const tr = trackById(spec.trackId);
+      if (tr && tr.url !== spec.url) { tr.url = spec.url; tr.kind = "local"; }
+    }
   }
+  if (spec && spec.kind === "youtube") spec = { ...spec, trackId: ensureTrack(spec.videoId).id };
+  state.settings.music[slot] = spec;
   audio.setSource(slot, spec);
-  if (spec && spec.kind === "youtube") state.settings.music[slot] = { ...spec, trackId: ensureTrack(spec.videoId).id };
 }
 applyI18n();
 applyTv();

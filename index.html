@@ -45,7 +45,7 @@
       <div id="wheelWrap">
         <div class="wheel-shadow" aria-hidden="true"></div>
         <canvas id="wheel"></canvas>
-        <button id="goBtn" aria-label="Spin"><span>GO</span></button>
+        <button id="goBtn" aria-label="Spin"><span>GO</span><span class="go-sub" id="goSub"></span></button>
       </div>
       <p id="stageHint"></p>
       <div id="stageMeta" aria-live="polite">
@@ -70,7 +70,7 @@
         <h3 data-i18n="showSection"></h3>
         <div class="setting">
           <label for="durationRange" data-i18n="spinDuration"></label>
-          <input id="durationVal" class="num-pill" type="number" min="3" max="12" step="0.5" value="6" inputmode="decimal">
+          <output id="durationVal">6</output>
           <input id="durationRange" type="range" min="3" max="12" step="0.5" value="6">
         </div>
         <div class="setting">
@@ -108,7 +108,7 @@
             <h4 data-i18n="trackLib"></h4>
             <ul id="trackList" class="track-list"></ul>
             <div class="track-add">
-              <input id="trackUrl" class="track-name" type="text" data-i18n-ph="trackUrlPh" aria-label="YouTube link">
+              <input id="trackUrl" class="track-name" type="text" data-i18n-ph="trackUrlPh" aria-label="Track source">
               <input id="trackName" class="track-name" type="text" data-i18n-ph="trackNamePh" aria-label="Track name">
               <button id="trackAddBtn" class="btn small gold" data-i18n="trackAdd"></button>
             </div>

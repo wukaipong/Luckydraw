@@ -22,7 +22,8 @@ public class MainActivity extends Activity {
     s.setDomStorageEnabled(true);
     s.setMediaPlaybackRequiresUserGesture(false);
     s.setUseWideViewPort(true);
-    s.setLoadWithOverviewMode(true);
+    // overview mode zooms the layout out and fights the meta viewport on TV panels
+    s.setLoadWithOverviewMode(false);
     s.setUserAgentString(s.getUserAgentString() + " LuckyDrawTV/1.0 (Android TV; Leanback)");
     web.setWebViewClient(new WebViewClient() {
       @Override
@@ -52,7 +53,7 @@ public class MainActivity extends Activity {
     }
     web.evaluateJavascript(
       "(function(){var s=document.getElementById('settingsPage'),o=document.getElementById('winnerOverlay');" +
-      "var open=(s&&!s.classList.contains('hidden'))||(o&&!o.classList.contains('hidden'));" +
+      "var open=(s&&s.classList.contains('open'))||(o&&!o.classList.contains('hidden'));" +
       "window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',keyCode:27,bubbles:true}));return open;})()",
       new android.webkit.ValueCallback<String>() {
         @Override

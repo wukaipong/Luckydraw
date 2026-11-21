@@ -1,4 +1,4 @@
-const CACHE = "circus-lucky-draw-v1";
+const CACHE = "circus-lucky-draw-v2";
 const CORE = ["./", "./index.html", "./manifest.webmanifest", "./icons/icon.svg", "./icons/icon-maskable.svg"];
 
 self.addEventListener("install", e => {
@@ -16,6 +16,8 @@ self.addEventListener("activate", e => {
 self.addEventListener("fetch", e => {
   const url = new URL(e.request.url);
   if (e.request.method !== "GET" || url.origin !== location.origin) return;
+  // streamed audio and the APK must never enter Cache Storage (quota + stale bytes)
+  if (url.pathname.startsWith("/music/") || url.pathname.startsWith("/download/")) return;
   if (e.request.mode === "navigate") {
     e.respondWith(
       fetch(e.request)

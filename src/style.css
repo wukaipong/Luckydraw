@@ -207,7 +207,9 @@ main {
   animation: wheelEnter 1.2s cubic-bezier(.2, 1.4, .4, 1) .5s both;
 }
 @keyframes wheelEnter { from { transform: scale(.3) rotate(-40deg); opacity: 0; } to { transform: scale(1) rotate(0); opacity: 1; } }
-#wheel { width: 100%; height: 100%; display: block; filter: drop-shadow(0 18px 40px rgba(0,0,0,.55)); }
+#wheelWrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+#wheelBase { filter: drop-shadow(0 18px 40px rgba(0,0,0,.55)); }
+#wheel, #wheelGlow { will-change: transform; }
 .wheel-shadow {
   position: absolute; left: 8%; right: 8%; bottom: -7%; height: 9%;
   background: radial-gradient(50% 50% at 50% 50%, rgba(0,0,0,.55), transparent 70%);
@@ -217,6 +219,7 @@ main {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   width: 19%; height: 19%; border-radius: 50%;
   border: none; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
   background: radial-gradient(circle at 35% 30%, #fff8e6, var(--cream) 60%, #eeddb8);
   color: var(--maroon);
   font-family: var(--font-display); font-size: clamp(16px, 3.4vmin, 30px);
@@ -232,6 +235,11 @@ main {
 @keyframes goPulse {
   0%,100% { box-shadow: 0 0 0 4px var(--maroon), 0 0 0 8px var(--teal), 0 6px 18px rgba(0,0,0,.45), 0 0 0 0 rgba(246,185,59,.5); }
   50% { box-shadow: 0 0 0 4px var(--maroon), 0 0 0 8px var(--teal), 0 6px 18px rgba(0,0,0,.45), 0 0 26px 10px rgba(246,185,59,.35); }
+}
+.go-sub {
+  display: none;
+  font-family: var(--font-body); font-size: clamp(10px, 1.7vmin, 17px);
+  font-weight: 800; letter-spacing: 0; opacity: .72; margin-top: 2px;
 }
 
 #stageHint {
@@ -412,17 +420,6 @@ textarea:focus { border-color: var(--red); border-style: solid; box-shadow: 0 0 
 .setting { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 10px; margin-bottom: 12px; }
 .setting label { font-size: 13.5px; font-weight: 800; color: var(--ink); }
 .setting output { font-size: 12.5px; font-weight: 800; color: var(--red-deep); background: rgba(232,64,77,.1); padding: 2px 9px; border-radius: 999px; }
-.num-pill {
-  width: 68px; text-align: center;
-  font-family: var(--font-body); font-size: 12.5px; font-weight: 800; color: var(--red-deep);
-  background: rgba(232, 64, 77, .1); border: 1.5px solid transparent; border-radius: 999px;
-  padding: 3px 6px; outline: none; cursor: text;
-  -moz-appearance: textfield; appearance: textfield;
-  transition: border-color .15s, background .15s, box-shadow .15s;
-}
-.num-pill::-webkit-outer-spin-button, .num-pill::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.num-pill:hover { background: rgba(232, 64, 77, .16); }
-.num-pill:focus { border-color: var(--red); background: #fffaf0; box-shadow: 0 0 0 3px rgba(232, 64, 77, .18); }
 .setting input[type="range"] { grid-column: 1 / -1; -webkit-appearance: none; appearance: none; width: 100%; height: 8px; border-radius: 6px; background: linear-gradient(90deg, var(--teal), var(--gold)); outline: none; cursor: pointer; }
 .setting input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%;
@@ -464,9 +461,18 @@ textarea:focus { border-color: var(--red); border-style: solid; box-shadow: 0 0 
 }
 .track-name:focus { border-color: var(--red); border-style: solid; box-shadow: 0 0 0 3px rgba(232, 64, 77, .18); }
 .track-vid {
-  flex-shrink: 0; font-size: 10.5px; color: #8a7a5c;
+  flex-shrink: 1; min-width: 0; max-width: 132px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 10.5px; color: #8a7a5c;
   background: rgba(217, 154, 31, .16); padding: 3px 7px; border-radius: 6px;
 }
+.track-kind {
+  flex-shrink: 0; font-size: 10px; font-weight: 900; letter-spacing: .06em;
+  color: var(--teal); background: rgba(23, 96, 111, .14);
+  padding: 3px 7px; border-radius: 6px;
+}
+.track-kind.yt { color: var(--red-deep); background: rgba(232, 64, 77, .12); }
+.track-kind.url { color: #1c6fb8; background: rgba(61, 155, 233, .14); }
 .track-del {
   flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%;
   border: 2px solid var(--red); background: transparent; color: var(--red-deep);
@@ -656,26 +662,58 @@ textarea:focus { border-color: var(--red); border-style: solid; box-shadow: 0 0 
   .wc-actions .btn { flex: 1; }
 }
 /* ————— Android TV / Google TV: 10-foot remote mode ————— */
-body.tv { --header-h: 84px; --valance-h: 54px; }
+body.tv { --header-h: 84px; --valance-h: 54px; overflow: hidden; }
 body.tv #topbar { padding: 0 5vw; }
 body.tv .brand h1 { font-size: 30px; letter-spacing: 2px; }
 body.tv .brand-star { width: 34px; height: 34px; }
 body.tv .brand-sub { font-size: 15px; }
-body.tv .top-btn { padding: 12px 18px; font-size: 17px; border-radius: 14px; }
+body.tv .top-btn { padding: 12px 18px; font-size: 17px; border-radius: 14px; white-space: nowrap; }
 body.tv .top-btn svg { width: 26px; height: 26px; }
 body.tv .lamp { font-size: 15px; }
 body.tv .lamp span { display: none; }
 body.tv .user-avatar { width: 38px; height: 38px; }
 body.tv .user-name { font-size: 17px; max-width: 220px; }
 body.tv .user-out { font-size: 15px; padding: 6px 14px; }
-body.tv main { padding-left: 5vw; padding-right: 5vw; }
-body.tv #wheelWrap {
-  width: min(80vmin, calc(100vh - var(--header-h) - var(--valance-h) - 215px));
-  height: min(80vmin, calc(100vh - var(--header-h) - var(--valance-h) - 215px));
+body.tv main {
+  display: block;
+  padding: calc(var(--header-h) + var(--valance-h) + 4px) 4vw 4px;
+  max-width: none;
 }
+/* the wheel is the show: full stage height, info pills live in the header bar */
+body.tv #stage {
+  min-height: 0; gap: 0; padding-bottom: 0;
+  height: calc(100vh - var(--header-h) - var(--valance-h) - 8px);
+}
+body.tv #wheelWrap {
+  flex-shrink: 0;
+  width: min(calc(100vh - var(--header-h) - var(--valance-h) - 8px), calc(100vw - 8vw));
+  height: min(calc(100vh - var(--header-h) - var(--valance-h) - 8px), calc(100vw - 8vw));
+}
+body.tv #stageHint { display: none; }
+body.tv #stageMeta { position: static; transform: none; gap: 10px; flex-wrap: nowrap; }
 body.tv #goBtn { font-size: clamp(22px, 4.2vmin, 44px); }
-body.tv #stageHint { font-size: 20px; padding: 12px 28px; }
-body.tv .meta-pill { font-size: 16px; padding: 8px 20px; }
+body.tv #goBtn .go-sub:not(:empty) { display: block; }
+body.tv .meta-pill { font-size: 15px; padding: 6px 16px; white-space: nowrap; }
+@media (max-width: 1360px) {
+  body.tv .brand-sub { display: none; }
+  body.tv .brand h1 { font-size: 26px; }
+  body.tv .meta-pill { font-size: 14px; padding: 5px 12px; }
+  body.tv .top-btn { font-size: 15px; padding: 10px 14px; }
+}
+/* TV perf: no per-frame filters/blends, overlays appear instantly on weak SoCs */
+body.tv #wheelBase { filter: none; }
+body.tv #settingsScrim { backdrop-filter: none; }
+body.tv .beams, body.tv #dust { display: none; }
+body.tv .bulbwire, body.tv .brand-star, body.tv .wc-marquee { animation: none; }
+body.tv .brand-star { filter: none; }
+body.tv #settingsPage {
+  transition: none; box-shadow: none;
+  /* stay in layout offscreen so opening never pays a full style+layout pass */
+  visibility: hidden; pointer-events: none;
+}
+body.tv #settingsPage.open { visibility: visible; pointer-events: auto; }
+body.tv #settingsScrim { animation: none; }
+body.tv #winnerOverlay, body.tv #keyOverlay, body.tv #winnerCard, body.tv #keyCard { animation: none; }
 body.tv :focus-visible {
   outline: 4px solid var(--gold); outline-offset: 3px;
   box-shadow: 0 0 0 8px rgba(246, 185, 59, .3), 0 0 26px rgba(246, 185, 59, .55);
@@ -692,7 +730,6 @@ body.tv .set-section h3 { font-size: 20px; margin-bottom: 16px; }
 body.tv .setting { margin-bottom: 18px; }
 body.tv .setting label { font-size: 18px; }
 body.tv .setting output { font-size: 16px; padding: 4px 14px; }
-body.tv .num-pill { width: 92px; font-size: 17px; padding: 6px 10px; }
 body.tv .setting input[type="range"] { height: 12px; }
 body.tv .setting input[type="range"]::-webkit-slider-thumb { width: 30px; height: 30px; }
 body.tv .setting input[type="range"]::-moz-range-thumb { width: 30px; height: 30px; }
@@ -705,7 +742,8 @@ body.tv .music-hint { font-size: 14px; }
 body.tv .track-lib h4 { font-size: 16px; margin-bottom: 12px; }
 body.tv .track-list { gap: 12px; }
 body.tv .track-name { font-size: 16px; padding: 10px 14px; }
-body.tv .track-vid { font-size: 13px; padding: 4px 10px; }
+body.tv .track-vid { font-size: 13px; padding: 4px 10px; max-width: 210px; }
+body.tv .track-kind { font-size: 13px; padding: 4px 10px; }
 body.tv .track-del { width: 38px; height: 38px; font-size: 19px; }
 body.tv .track-add { margin-top: 14px; }
 body.tv .key-lib h4 { font-size: 16px; margin-bottom: 12px; }
