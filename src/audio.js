@@ -11,6 +11,15 @@ const BASS_ROOTS = [48,48,53,55,48,55,53,48,53,53,55,48,53,55,53,48];
 const BEAT = 60 / 165;
 const LOOP_BEATS = 48;
 
+// Triumphant winner march, 4 bars of 4/4 in C major — loops until the winner is confirmed
+const WIN_MELODY = [
+  [0,72,1],[1,76,1],[2,79,1],[3,84,1.8],[5,83,.5],[5.5,81,.5],[6,79,1],[7,81,1],
+  [8,84,1],[9,88,1],[10,88,1.8],[12,86,1],[13,84,1],[14,83,1],[15,79,1]
+];
+const WIN_BASS = [48,48,53,55];
+const WIN_BEAT = 60 / 138;
+const WIN_LOOP = 16;
+
 export class AudioEngine {
   constructor() {
     this.ctx = null;
@@ -19,10 +28,15 @@ export class AudioEngine {
     this.slots = { bgm: null, spin: null, win: null };
     this.custom = { bgm: null, spin: null, win: null };
     this.failed = { bgm: false, spin: false, win: false };
+    // playVideo() outside a user gesture can be refused; blocked slots fall back to synth and retry on the next gesture
+    this.blocked = { bgm: false, spin: false, win: false };
+    this.watchTimer = null;
     this.desired = "bgm";
     this.bgmTimer = null;
     this.spinTimer = null;
+    this.winTimer = null;
     this.spinNodes = [];
+    this.winNodes = [];
     this.bgmBeat = 0;
     this.bgmNext = 0;
     this.ytApi = null;
@@ -33,6 +47,11 @@ export class AudioEngine {
       if (!this.melodyAt.has(key)) this.melodyAt.set(key, []);
       this.melodyAt.get(key).push([m, d]);
       b += d;
+    }
+    this.winMelodyAt = new Map();
+    for (const [beat, m, d] of WIN_MELODY) {
+      if (!this.winMelodyAt.has(beat)) this.winMelodyAt.set(beat, []);
+      this.winMelodyAt.get(beat).push([m, d]);
     }
   }
 
@@ -46,6 +65,7 @@ export class AudioEngine {
     this.master.connect(this.ctx.destination);
     this.bgmBus = this.ctx.createGain(); this.bgmBus.connect(this.master);
     this.spinBus = this.ctx.createGain(); this.spinBus.connect(this.master);
+    this.winBus = this.ctx.createGain(); this.winBus.connect(this.master);
     this.sfxBus = this.ctx.createGain(); this.sfxBus.connect(this.master);
     const len = this.ctx.sampleRate * 2;
     this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
@@ -57,14 +77,20 @@ export class AudioEngine {
   }
 
   musicState() {
-    const out = {};
+    const out = {
+      desired: this.desired,
+      active: { bgm: !!this.bgmTimer, spin: !!this.spinTimer, win: !!this.winTimer }
+    };
     for (const slot of ["bgm", "spin", "win"]) {
       const c = this.custom[slot];
       out[slot] = {
         source: this.slots[slot] ? this.slots[slot].kind : "synth",
         failed: this.failed[slot],
+        blocked: this.blocked[slot],
         ready: c ? (c.kind === "youtube" ? c.ready : true) : true,
-        playerState: c && c.kind === "youtube" && c.ready ? c.player.getPlayerState() : null
+        playerState: c && c.kind === "youtube" && c.ready ? c.player.getPlayerState() : null,
+        videoId: c && c.kind === "youtube" ? c.videoId : null,
+        loop: c ? (c.kind === "audio" ? c.el.loop : c.ready ? c.loop : null) : null
       };
     }
     return out;
@@ -91,26 +117,26 @@ export class AudioEngine {
     }
     this.slots[slot] = spec || null;
     this.failed[slot] = false;
+    this.blocked[slot] = false;
     if (spec && spec.kind === "audio") {
       const el = new Audio(spec.url);
-      el.loop = slot !== "win";
+      el.loop = true;
       el.preload = "auto";
       el.muted = this.muted;
       el.addEventListener("error", () => {
         this.failed[slot] = true;
         if (this.unlocked && this.desired === slot) this.route();
       });
-      if (slot === "win") el.onended = () => { if (this.desired === "win") { this.desired = "bgm"; this.route(); } };
       this.custom[slot] = { kind: "audio", el };
     } else if (spec && spec.kind === "youtube") {
-      const entry = { kind: "youtube", videoId: spec.videoId, ready: false, player: null };
+      const entry = { kind: "youtube", videoId: spec.videoId, ready: false, player: null, loop: true };
       this.custom[slot] = entry;
       this.ensureYtApi().then(() => {
         const div = document.createElement("div");
         document.getElementById("ytHost").appendChild(div);
         entry.player = new window.YT.Player(div, {
           width: 200, height: 120, videoId: spec.videoId,
-          playerVars: { autoplay: 0, controls: 0, loop: slot !== "win" ? 1 : 0, playlist: spec.videoId, playsinline: 1 },
+          playerVars: { autoplay: 0, controls: 0, loop: 1, playlist: spec.videoId, playsinline: 1 },
           events: {
             onReady: () => {
               entry.ready = true;
@@ -121,11 +147,6 @@ export class AudioEngine {
             onError: () => {
               this.failed[slot] = true;
               if (this.unlocked && this.desired === slot) this.route();
-            },
-            onStateChange: e => {
-              if (slot === "win" && e.data === window.YT.PlayerState.ENDED && this.desired === "win") {
-                this.desired = "bgm"; this.route();
-              }
             }
           }
         });
@@ -155,13 +176,18 @@ export class AudioEngine {
   }
 
   stopAll() {
+    clearTimeout(this.watchTimer);
     clearInterval(this.bgmTimer); this.bgmTimer = null;
     clearInterval(this.spinTimer); this.spinTimer = null;
+    clearInterval(this.winTimer); this.winTimer = null;
     for (const n of this.spinNodes) { try { n.stop(); } catch {} }
     this.spinNodes = [];
+    for (const n of this.winNodes) { try { n.stop(); } catch {} }
+    this.winNodes = [];
     if (this.ctx) {
       this.bgmBus.gain.setTargetAtTime(0, this.ctx.currentTime, 0.08);
       this.spinBus.gain.setTargetAtTime(0, this.ctx.currentTime, 0.08);
+      this.winBus.gain.setTargetAtTime(0, this.ctx.currentTime, 0.08);
     }
     for (const slot of Object.keys(this.custom)) {
       const c = this.custom[slot];
@@ -175,19 +201,56 @@ export class AudioEngine {
     if (!this.unlocked) return;
     this.stopAll();
     const slot = this.desired;
+    if (this.slots[slot] && this.slots[slot].kind === "off") return;
     const c = this.custom[slot];
-    if (c && !this.failed[slot]) {
-      if (c.kind === "audio") { c.el.currentTime = 0; c.el.play().catch(() => {}); return; }
+    if (c && !this.failed[slot] && !this.blocked[slot]) {
+      if (c.kind === "audio") {
+        c.el.currentTime = 0;
+        c.el.play().catch(() => {
+          if (this.custom[slot] !== c || this.desired !== slot) return;
+          this.blocked[slot] = true;
+          this.route();
+        });
+        return;
+      }
       if (c.kind === "youtube" && c.ready) {
         try { c.player.seekTo(0, true); } catch {}
         c.player.playVideo();
+        this.watchPlayback(slot);
         return;
       }
       // custom source still loading: keep the show audible with the synth meanwhile
     }
     if (slot === "bgm") this.startSynthBgm();
     else if (slot === "spin") this.startSynthSpin();
-    // 'win' with no playable custom source: fanfare already fired by endSpin
+    else if (slot === "win") this.startSynthWin();
+  }
+
+  watchPlayback(slot) {
+    const c = this.custom[slot];
+    this.watchTimer = setTimeout(() => {
+      if (this.desired !== slot || this.custom[slot] !== c || this.failed[slot]) return;
+      if (!c || c.kind !== "youtube" || !c.ready) return;
+      const st = c.player.getPlayerState();
+      if (st === 1 || st === 3) return;
+      this.blocked[slot] = true;
+      this.route();
+    }, 900);
+  }
+
+  userGesture() {
+    this.unlock();
+    if (this.ctx && this.ctx.state === "suspended") this.ctx.resume();
+    const slot = this.desired;
+    if (this.blocked[slot]) { this.blocked[slot] = false; this.route(); return; }
+    const c = this.custom[slot];
+    if (!c || this.failed[slot]) return;
+    if (c.kind === "youtube" && c.ready) {
+      const st = c.player.getPlayerState();
+      if (st !== 1 && st !== 3) { c.player.playVideo(); this.watchPlayback(slot); }
+    } else if (c.kind === "audio" && c.el.paused) {
+      c.el.play().catch(() => {});
+    }
   }
 
   playBgm() { this.desired = "bgm"; this.route(); }
@@ -199,13 +262,8 @@ export class AudioEngine {
   }
 
   endSpin() {
-    const hasWin = this.custom.win && !this.failed.win;
-    if (!hasWin) this.fanfare();
     this.desired = "win";
     this.route();
-    if (!hasWin) {
-      setTimeout(() => { if (this.desired === "win") this.playBgm(); }, 2000);
-    }
   }
 
   /* ————— synth: calliope waltz BGM ————— */
@@ -304,7 +362,7 @@ export class AudioEngine {
     }, 80);
   }
 
-  kick(when) {
+  kick(when, bus = this.spinBus) {
     const ctx = this.ctx;
     const o = ctx.createOscillator();
     o.frequency.setValueAtTime(150, when);
@@ -312,19 +370,59 @@ export class AudioEngine {
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.22, when);
     g.gain.exponentialRampToValueAtTime(0.001, when + 0.14);
-    o.connect(g); g.connect(this.spinBus);
+    o.connect(g); g.connect(bus);
     o.start(when); o.stop(when + 0.16);
   }
 
-  snare(when, vol) {
+  snare(when, vol, bus = this.spinBus) {
     const ctx = this.ctx;
     const s = ctx.createBufferSource(); s.buffer = this.noiseBuf;
     const f = ctx.createBiquadFilter(); f.type = "highpass"; f.frequency.value = 1800;
     const g = ctx.createGain();
     g.gain.setValueAtTime(vol, when);
     g.gain.exponentialRampToValueAtTime(0.001, when + 0.09);
-    s.connect(f); f.connect(g); g.connect(this.spinBus);
+    s.connect(f); f.connect(g); g.connect(bus);
     s.start(when); s.stop(when + 0.1);
+  }
+
+  /* ————— synth: winner march, loops until confirmed ————— */
+  startSynthWin() {
+    const ctx = this.ctx;
+    this.winBus.gain.setTargetAtTime(0.9, ctx.currentTime, 0.15);
+    this.winNext = ctx.currentTime + 0.05;
+    this.winStep = 0;
+    this.winTimer = setInterval(() => {
+      while (this.winNext < ctx.currentTime + 0.4) {
+        this.scheduleWinBeat(this.winStep, this.winNext);
+        this.winStep++;
+        this.winNext += WIN_BEAT;
+      }
+    }, 100);
+  }
+
+  scheduleWinBeat(step, when) {
+    const s = step % WIN_LOOP;
+    const root = WIN_BASS[Math.floor(s / 4)];
+    if (s % 2 === 0) this.tone(root, when, WIN_BEAT * 0.8, "triangle", 0.13, this.winBus);
+    else this.tone(root + 7, when, WIN_BEAT * 0.35, "triangle", 0.05, this.winBus);
+    if (s % 4 === 0) this.kick(when, this.winBus);
+    if (s % 4 === 2) this.snare(when, 0.045, this.winBus);
+    const notes = this.winMelodyAt.get(s);
+    if (notes) for (const [m, d] of notes) this.brass(m, when, d * WIN_BEAT, 0.09, true, this.winBus);
+    if (step % 32 === 0) this.cheer(when);
+  }
+
+  cheer(when) {
+    const ctx = this.ctx;
+    const c = ctx.createBufferSource(); c.buffer = this.noiseBuf; c.loop = true;
+    const cf = ctx.createBiquadFilter(); cf.type = "bandpass"; cf.frequency.value = 1100; cf.Q.value = 0.6;
+    const cg = ctx.createGain();
+    cg.gain.setValueAtTime(0.001, when);
+    cg.gain.exponentialRampToValueAtTime(0.07, when + 0.5);
+    cg.gain.exponentialRampToValueAtTime(0.001, when + 1.9);
+    c.connect(cf); cf.connect(cg); cg.connect(this.winBus);
+    c.start(when); c.stop(when + 2);
+    this.winNodes.push(c);
   }
 
   tick() {
@@ -341,34 +439,7 @@ export class AudioEngine {
     o.start(when); o.stop(when + 0.05);
   }
 
-  fanfare() {
-    if (!this.unlocked) return;
-    const ctx = this.ctx;
-    const t0 = ctx.currentTime + 0.02;
-    [72, 76, 79, 84].forEach((m, i) => {
-      this.brass(m, t0 + i * 0.13, 0.16, 0.1);
-    });
-    [84, 88, 91].forEach(m => this.brass(m, t0 + 0.55, 0.85, 0.07, true));
-    // cymbal
-    const s = ctx.createBufferSource(); s.buffer = this.noiseBuf;
-    const f = ctx.createBiquadFilter(); f.type = "highpass"; f.frequency.value = 6000;
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(0.14, t0 + 0.55);
-    g.gain.exponentialRampToValueAtTime(0.001, t0 + 1.5);
-    s.connect(f); f.connect(g); g.connect(this.sfxBus);
-    s.start(t0 + 0.55); s.stop(t0 + 1.6);
-    // crowd cheer swell
-    const c = ctx.createBufferSource(); c.buffer = this.noiseBuf; c.loop = true;
-    const cf = ctx.createBiquadFilter(); cf.type = "bandpass"; cf.frequency.value = 1100; cf.Q.value = 0.6;
-    const cg = ctx.createGain();
-    cg.gain.setValueAtTime(0.001, t0 + 0.4);
-    cg.gain.exponentialRampToValueAtTime(0.085, t0 + 0.9);
-    cg.gain.exponentialRampToValueAtTime(0.001, t0 + 2.2);
-    c.connect(cf); cf.connect(cg); cg.connect(this.sfxBus);
-    c.start(t0 + 0.4); c.stop(t0 + 2.3);
-  }
-
-  brass(midi, when, dur, vol, vibrato = false) {
+  brass(midi, when, dur, vol, vibrato = false, bus = this.sfxBus) {
     const ctx = this.ctx;
     const g = ctx.createGain();
     g.gain.setValueAtTime(0, when);
@@ -376,7 +447,7 @@ export class AudioEngine {
     g.gain.setValueAtTime(vol, when + dur - 0.08);
     g.gain.linearRampToValueAtTime(0, when + dur);
     const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 2600;
-    g.connect(lp); lp.connect(this.sfxBus);
+    g.connect(lp); lp.connect(bus);
     for (const type of ["sawtooth", "square"]) {
       const o = ctx.createOscillator();
       o.type = type; o.frequency.value = midiHz(midi);

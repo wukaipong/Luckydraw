@@ -23,11 +23,14 @@
     <div class="top-actions">
       <div id="mcpLamp" class="lamp" role="status"><i></i><span id="mcpLampText"></span></div>
       <button id="installBtn" class="top-btn hidden" data-i18n="install"></button>
-      <button id="langBtn" class="top-btn" aria-label="Language">EN</button>
       <button id="soundBtn" class="top-btn sound" aria-pressed="true">
         <svg id="soundIconOn" viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg>
         <svg id="soundIconOff" viewBox="0 0 24 24" width="18" height="18" class="hidden"><path fill="currentColor" d="M3 9v6h4l5 5V4L7 9H3zm18.6 3l2.1-2.1-1.4-1.4-2.1 2.1-2.1-2.1-1.4 1.4 2.1 2.1-2.1 2.1 1.4 1.4 2.1-2.1 2.1 2.1 1.4-1.4-2.1-2.1z"/></svg>
         <span id="soundLabel"></span>
+      </button>
+      <button id="settingsBtn" class="top-btn gear" aria-haspopup="dialog">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm9.4 5.5l-2.1-.4a7.6 7.6 0 0 1-.6 1.5l1.2 1.7-1.9 1.9-1.7-1.2c-.5.3-1 .5-1.5.6l-.4 2.1h-2.7l-.4-2.1a7.6 7.6 0 0 1-1.5-.6l-1.7 1.2-1.9-1.9 1.2-1.7c-.3-.5-.5-1-.6-1.5l-2.1-.4v-2.7l2.1-.4c.1-.5.3-1 .6-1.5L4.2 6.4l1.9-1.9 1.7 1.2c.5-.3 1-.5 1.5-.6l.4-2.1h2.7l.4 2.1c.5.1 1 .3 1.5.6l1.7-1.2 1.9 1.9-1.2 1.7c.3.5.5 1 .6 1.5l2.1.4v2.7z"/></svg>
+        <span data-i18n="settings"></span>
       </button>
     </div>
   </header>
@@ -44,37 +47,26 @@
         <button id="goBtn" aria-label="Spin"><span>GO</span></button>
       </div>
       <p id="stageHint"></p>
+      <div id="stageMeta" aria-live="polite">
+        <span id="metaCount" class="meta-pill"></span>
+        <span id="metaLast" class="meta-pill gold"></span>
+      </div>
     </section>
+  </main>
 
-    <aside id="panel">
-      <section class="card">
-        <h2>
-          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M2 9a2 2 0 0 0 2-2V5h16v2a2 2 0 0 0 2 2v6a2 2 0 0 0-2 2v2H4v-2a2 2 0 0 0-2-2V9zm6-1v8h2V8H8z"/></svg>
-          <span data-i18n="participants"></span>
-          <span id="countBadge" class="badge">0</span>
-        </h2>
-        <textarea id="namesInput" rows="3" data-i18n-ph="namesPlaceholder" spellcheck="false"></textarea>
-        <div class="row">
-          <button id="addBtn" class="btn red" data-i18n="add"></button>
-          <button id="clearBtn" class="btn ghost" data-i18n="clearAll"></button>
-        </div>
-        <div class="range-block">
-          <label data-i18n="numberRange"></label>
-          <div class="range-row">
-            <div class="stepper"><button data-step="min:-1" aria-label="decrease">−</button><input id="rangeMin" type="number" value="1" min="0" max="99999"><button data-step="min:1" aria-label="increase">+</button></div>
-            <span class="dash">–</span>
-            <div class="stepper"><button data-step="max:-1" aria-label="decrease">−</button><input id="rangeMax" type="number" value="100" min="0" max="99999"><button data-step="max:1" aria-label="increase">+</button></div>
-            <button id="genBtn" class="btn gold small" data-i18n="generate"></button>
-          </div>
-        </div>
-        <div id="chips" class="chips"></div>
-      </section>
-
-      <section class="card">
-        <h2>
-          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm9.4 5.5l-2.1-.4a7.6 7.6 0 0 1-.6 1.5l1.2 1.7-1.9 1.9-1.7-1.2c-.5.3-1 .5-1.5.6l-.4 2.1h-2.7l-.4-2.1a7.6 7.6 0 0 1-1.5-.6l-1.7 1.2-1.9-1.9 1.2-1.7c-.3-.5-.5-1-.6-1.5l-2.1-.4v-2.7l2.1-.4c.1-.5.3-1 .6-1.5L4.2 6.4l1.9-1.9 1.7 1.2c.5-.3 1-.5 1.5-.6l.4-2.1h2.7l.4 2.1c.5.1 1 .3 1.5.6l1.7-1.2 1.9 1.9-1.2 1.7c.3.5.5 1 .6 1.5l2.1.4v2.7z"/></svg>
-          <span data-i18n="settings"></span>
-        </h2>
+  <div id="settingsScrim" class="hidden" aria-hidden="true"></div>
+  <div id="settingsPage" class="hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <header class="set-head">
+      <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm9.4 5.5l-2.1-.4a7.6 7.6 0 0 1-.6 1.5l1.2 1.7-1.9 1.9-1.7-1.2c-.5.3-1 .5-1.5.6l-.4 2.1h-2.7l-.4-2.1a7.6 7.6 0 0 1-1.5-.6l-1.7 1.2-1.9-1.9 1.2-1.7c-.3-.5-.5-1-.6-1.5l-2.1-.4v-2.7l2.1-.4c.1-.5.3-1 .6-1.5L4.2 6.4l1.9-1.9 1.7 1.2c.5-.3 1-.5 1.5-.6l.4-2.1h2.7l.4 2.1c.5.1 1 .3 1.5.6l1.7-1.2 1.9 1.9-1.2 1.7c.3.5.5 1 .6 1.5l2.1.4v2.7z"/></svg>
+      <h2 id="settingsTitle" data-i18n="settings"></h2>
+      <button id="settingsClose" class="set-close" aria-label="Close">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M18.3 5.7L12 12l6.3 6.3-1.4 1.4L10.6 13.4 4.3 19.7 2.9 18.3 9.2 12 2.9 5.7 4.3 4.3l6.3 6.3 6.3-6.3z"/></svg>
+        <span data-i18n="close"></span>
+      </button>
+    </header>
+    <div id="settingsScroll">
+      <section class="card set-section">
+        <h3 data-i18n="showSection"></h3>
         <div class="setting">
           <label for="durationRange" data-i18n="spinDuration"></label>
           <input id="durationVal" class="num-pill" type="number" min="3" max="12" step="0.5" value="6" inputmode="decimal">
@@ -98,21 +90,78 @@
           <label for="tickToggle" data-i18n="tickSound"></label>
           <label class="switch"><input id="tickToggle" type="checkbox" checked><i></i></label>
         </div>
+      </section>
+
+      <section class="card set-section">
+        <h3 data-i18n="musicSection"></h3>
+        <div class="setting toggle-row">
+          <label for="soundToggle" data-i18n="sound"></label>
+          <label class="switch"><input id="soundToggle" type="checkbox" checked><i></i></label>
+        </div>
         <div class="music-block">
-          <label class="music-title" data-i18n="music"></label>
           <div class="music-row"><span data-i18n="bgmSlot"></span><select id="musicBgm" aria-label="Background music source"></select></div>
           <div class="music-row"><span data-i18n="spinSlot"></span><select id="musicSpin" aria-label="Spin music source"></select></div>
           <div class="music-row"><span data-i18n="winSlot"></span><select id="musicWin" aria-label="Victory music source"></select></div>
           <p class="music-hint" data-i18n="musicFallback"></p>
+          <div class="track-lib">
+            <h4 data-i18n="trackLib"></h4>
+            <ul id="trackList" class="track-list"></ul>
+            <div class="track-add">
+              <input id="trackUrl" class="track-name" type="text" data-i18n-ph="trackUrlPh" aria-label="YouTube link">
+              <input id="trackName" class="track-name" type="text" data-i18n-ph="trackNamePh" aria-label="Track name">
+              <button id="trackAddBtn" class="btn small gold" data-i18n="trackAdd"></button>
+            </div>
+          </div>
         </div>
       </section>
 
-      <section class="card">
-        <h2>
-          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M5 3h14v2h3v4a5 5 0 0 1-4.6 5A6 6 0 0 1 13 17.9V20h4v2H7v-2h4v-2.1A6 6 0 0 1 6.6 14 5 5 0 0 1 2 9V5h3V3zm0 4H4v2a3 3 0 0 0 1.6 2.7A9 9 0 0 1 5 8V7zm15 2V7h-1v1c0 1.3-.2 2.5-.6 3.7A3 3 0 0 0 20 9z"/></svg>
+      <section class="card set-section">
+        <h3 data-i18n="interfaceSection"></h3>
+        <div class="setting select-row">
+          <label for="langSelect" data-i18n="language"></label>
+          <select id="langSelect">
+            <option value="zh">繁體中文</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+        <div class="setting select-row">
+          <label for="tvSelect" data-i18n="tvMode"></label>
+          <select id="tvSelect">
+            <option value="auto" data-i18n="tvAuto"></option>
+            <option value="on" data-i18n="tvOn"></option>
+            <option value="off" data-i18n="tvOff"></option>
+          </select>
+        </div>
+        <p class="music-hint" data-i18n="tvHint"></p>
+      </section>
+
+      <section class="card set-section">
+        <h3>
+          <span data-i18n="participants"></span>
+          <span id="countBadge" class="badge">0</span>
+        </h3>
+        <textarea id="namesInput" rows="3" data-i18n-ph="namesPlaceholder" spellcheck="false"></textarea>
+        <div class="row">
+          <button id="addBtn" class="btn red" data-i18n="add"></button>
+          <button id="clearBtn" class="btn ghost" data-i18n="clearAll"></button>
+        </div>
+        <div class="range-block">
+          <label data-i18n="numberRange"></label>
+          <div class="range-row">
+            <div class="stepper"><button data-step="min:-1" aria-label="decrease">−</button><input id="rangeMin" type="number" value="1" min="0" max="99999"><button data-step="min:1" aria-label="increase">+</button></div>
+            <span class="dash">–</span>
+            <div class="stepper"><button data-step="max:-1" aria-label="decrease">−</button><input id="rangeMax" type="number" value="100" min="0" max="99999"><button data-step="max:1" aria-label="increase">+</button></div>
+            <button id="genBtn" class="btn gold small" data-i18n="generate"></button>
+          </div>
+        </div>
+        <div id="chips" class="chips"></div>
+      </section>
+
+      <section class="card set-section">
+        <h3>
           <span data-i18n="history"></span>
           <span id="historyBadge" class="badge">0</span>
-        </h2>
+        </h3>
         <div class="row">
           <button id="exportBtn" class="btn ghost small" data-i18n="exportCsv"></button>
           <button id="resetBtn" class="btn ghost small" data-i18n="resetAll"></button>
@@ -121,16 +170,16 @@
         <p id="historyEmpty" class="empty" data-i18n="historyEmpty"></p>
       </section>
 
-      <section class="card mcp-card">
-        <h2>
-          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M9 2v6H7v4a5 5 0 0 0 4 4.9V22h2v-5.1A5 5 0 0 0 17 12V8h-2V2h-2v6h-2V2H9z"/></svg>
-          <span data-i18n="mcpTitle"></span>
-        </h2>
-        <p class="mcp-line"><span id="mcpDot" class="dot"></span><code>ws://localhost:8787</code></p>
+      <section class="card set-section mcp-card">
+        <h3 data-i18n="mcpTitle"></h3>
+        <p class="mcp-line"><span id="mcpDot" class="dot"></span><code id="mcpEndpoint">ws://localhost:4173</code></p>
         <p class="mcp-hint" data-i18n="mcpHint"></p>
+        <div class="row">
+          <button id="keygenBtn" class="btn gold small" data-i18n="keygenBtn"></button>
+        </div>
       </section>
-    </aside>
-  </main>
+    </div>
+  </div>
 
   <div id="winnerOverlay" class="hidden" role="dialog" aria-modal="true">
     <div id="winnerCard">
@@ -142,6 +191,18 @@
         <button id="redrawBtn" class="btn redline" data-i18n="redraw"></button>
       </div>
       <p class="wc-hint" data-i18n="wcHint"></p>
+    </div>
+  </div>
+
+  <div id="keyOverlay" class="hidden" role="dialog" aria-modal="true">
+    <div id="keyCard">
+      <p class="wc-title" data-i18n="keyTitle"></p>
+      <code id="keyValue"></code>
+      <div class="wc-actions">
+        <button id="keyCopyBtn" class="btn gold" data-i18n="copyKey"></button>
+        <button id="keyCloseBtn" class="btn redline" data-i18n="closeKey"></button>
+      </div>
+      <p class="wc-hint" data-i18n="keyHint"></p>
     </div>
   </div>
 

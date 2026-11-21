@@ -4,8 +4,13 @@ export class Bridge {
     this.onStatus = onStatus;
     this.ws = null;
     this.retry = 1000;
+    this.reqId = 0;
+    this.pending = new Map();
     const params = new URLSearchParams(location.search);
-    this.url = params.get("bridge") || "ws://localhost:8787";
+    const devPort = location.port === "5173";
+    this.url = params.get("bridge") || (devPort
+      ? "ws://localhost:4173"
+      : `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws`);
     this.connect();
   }
 
@@ -20,6 +25,13 @@ export class Bridge {
     this.ws.onmessage = async ev => {
       let msg;
       try { msg = JSON.parse(ev.data); } catch { return; }
+      if (msg.type === "response" && this.pending.has(msg.id)) {
+        const { resolve, reject, timer } = this.pending.get(msg.id);
+        clearTimeout(timer);
+        this.pending.delete(msg.id);
+        msg.ok ? resolve(msg.data) : reject(new Error(msg.error));
+        return;
+      }
       if (msg.type !== "command") return;
       try {
         const data = await this.onCommand(msg.name, msg.args || {});
@@ -39,6 +51,22 @@ export class Bridge {
 
   send(obj) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(obj));
+  }
+
+  request(name, args = {}, timeoutMs = 15000) {
+    return new Promise((resolve, reject) => {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        reject(new Error("MCP bridge is not connected"));
+        return;
+      }
+      const id = ++this.reqId;
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`Timed out waiting for "${name}"`));
+      }, timeoutMs);
+      this.pending.set(id, { resolve, reject, timer });
+      this.send({ type: "request", id, name, args });
+    });
   }
 
   event(name, data) { this.send({ type: "event", name, data }); }

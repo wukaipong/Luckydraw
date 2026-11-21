@@ -13,11 +13,16 @@ export const state = {
     ticks: true,
     sound: true,
     lang: "zh",
+    tvMode: "auto",
     music: {
       bgm: { kind: "youtube", videoId: "ASGism_azes" },
       spin: { kind: "youtube", videoId: "IfYPHQ-oU5w" },
       win: null
-    }
+    },
+    tracks: [
+      { id: "seed-bgm", name: "", videoId: "ASGism_azes" },
+      { id: "seed-spin", name: "", videoId: "IfYPHQ-oU5w" }
+    ]
   }
 };
 
@@ -30,6 +35,8 @@ try {
     Object.assign(state.settings, saved.settings || {});
   }
 } catch { /* fresh start */ }
+if (!Array.isArray(state.settings.tracks)) state.settings.tracks = [];
+state.settings.tracks = state.settings.tracks.filter(tr => tr && tr.id && typeof tr.videoId === "string");
 
 let timer = null;
 export function save() {
@@ -38,6 +45,11 @@ export function save() {
     try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* storage full/blocked */ }
   }, 150);
 }
+// a tab/TV app killed inside the debounce window must not lose the last mutation
+window.addEventListener("pagehide", () => {
+  clearTimeout(timer);
+  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* storage full/blocked */ }
+});
 
 const listeners = new Set();
 export function onChange(fn) { listeners.add(fn); }
