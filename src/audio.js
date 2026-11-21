@@ -42,6 +42,7 @@ export class AudioEngine {
     this.bgmBeat = 0;
     this.bgmNext = 0;
     this.ytApi = null;
+    this.suspended = false;
     this.melodyAt = new Map();
     let b = 0;
     for (const [m, d] of MELODY) {
@@ -207,7 +208,22 @@ export class AudioEngine {
     }
   }
 
+  suspend() {
+    this.suspended = true;
+    this.stopAll();
+    if (this.ctx && this.ctx.state === "running") this.ctx.suspend().catch(() => {});
+  }
+
+  resume() {
+    if (!this.suspended) return;
+    this.suspended = false;
+    if (!this.unlocked) return;
+    if (this.ctx && this.ctx.state === "suspended") this.ctx.resume().catch(() => {});
+    this.route();
+  }
+
   route() {
+    if (this.suspended) return;
     this.stopAll();
     const slot = this.desired;
     if (this.slots[slot] && this.slots[slot].kind === "off") return;

@@ -45,6 +45,35 @@ public class MainActivity extends Activity {
     web.loadUrl("file:///android_asset/error.html");
   }
 
+  private void setAudioSuspended(boolean suspended) {
+    if (web == null) return;
+    web.evaluateJavascript(suspended
+      ? "window.__ldSuspendAudio&&window.__ldSuspendAudio()"
+      : "window.__ldResumeAudio&&window.__ldResumeAudio()", null);
+  }
+
+  @Override
+  protected void onPause() {
+    setAudioSuspended(true);
+    if (web != null) web.onPause();
+    super.onPause();
+  }
+
+  @Override
+  protected void onResume() {
+    super.onResume();
+    if (web != null) {
+      web.onResume();
+      setAudioSuspended(false);
+    }
+  }
+
+  @Override
+  protected void onStop() {
+    setAudioSuspended(true);
+    super.onStop();
+  }
+
   @Override
   public void onBackPressed() {
     if (!live) {
@@ -65,6 +94,7 @@ public class MainActivity extends Activity {
 
   @Override
   protected void onDestroy() {
+    setAudioSuspended(true);
     if (web != null) web.destroy();
     super.onDestroy();
   }

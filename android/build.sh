@@ -22,8 +22,7 @@ rm -rf "$OUT"; mkdir -p "$OUT/classes" "$OUT/dex" "$ROOT/apk"
 "$BT/aapt2.exe" link -o "$OUT/base.apk" -I "$PJ" \
   --manifest "$ROOT/android/AndroidManifest.xml" \
   -R "$OUT/res.zip" -A "$ROOT/android/assets" \
-  --min-sdk-version 22 --target-sdk-version 34 \
-  --version-code 2 --version-name 1.1 --auto-add-overlay
+  --min-sdk-version 22 --target-sdk-version 34 --auto-add-overlay
 
 (cd "$OUT/dex" && "$JDK/jar.exe" uf "$OUT/base.apk" classes.dex)
 
