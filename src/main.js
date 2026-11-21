@@ -34,6 +34,10 @@ const els = {
   lamp: $("mcpLamp"), lampText: $("mcpLampText"), mcpDot: $("mcpDot"),
   keygen: $("keygenBtn"), keyOverlay: $("keyOverlay"), keyValue: $("keyValue"),
   keyCopy: $("keyCopyBtn"), keyClose: $("keyCloseBtn"),
+  keyList: $("keyList"), keyListEmpty: $("keyListEmpty"),
+  keyNameStage: $("keyNameStage"), keyResultStage: $("keyResultStage"),
+  keyNameInput: $("keyNameInput"), keyCreate: $("keyCreateBtn"),
+  keyCancel: $("keyCancelBtn"), keyLabel: $("keyLabel"),
   toasts: $("toasts")
 };
 
@@ -145,6 +149,7 @@ function openSettings() {
   els.settingsPage.classList.remove("hidden");
   requestAnimationFrame(() => els.settingsPage.classList.add("open"));
   focusWithin(els.settingsPage);
+  refreshKeyList();
 }
 function closeSettings() {
   if (!settingsOpen) return;
@@ -617,6 +622,7 @@ els.tvSelect.addEventListener("change", () => {
 
 /* keyboard */
 window.addEventListener("keydown", e => {
+  if (e.key === "Escape" && !els.keyOverlay.classList.contains("hidden")) { closeKeyOverlay(); return; }
   if (e.key === "Escape" && settingsOpen) { closeSettings(); return; }
   const tag = document.activeElement?.tagName;
   if (tag === "TEXTAREA" || tag === "INPUT" || tag === "SELECT") return;
@@ -763,7 +769,7 @@ const commands = {
 };
 
 const bridge = new Bridge({
-  onStatus: online => { mcpOnline = online; updateMcpStatus(); },
+  onStatus: online => { mcpOnline = online; updateMcpStatus(); if (online && settingsOpen) refreshKeyList(); },
   onCommand: (name, args) => {
     const fn = commands[name];
     if (!fn) throw new Error(`Unknown command: ${name}`);
@@ -771,17 +777,71 @@ const bridge = new Bridge({
   }
 });
 
-/* ————— API key generation ————— */
-els.keygen.addEventListener("click", async () => {
-  if (!mcpOnline) { toast(t("keygenOffline")); return; }
-  els.keygen.disabled = true;
+/* ————— API key management ————— */
+async function refreshKeyList() {
+  if (!mcpOnline) {
+    els.keyList.innerHTML = "";
+    els.keyListEmpty.classList.remove("hidden");
+    return;
+  }
   try {
-    const data = await bridge.request("generate_api_key", { label: "ui" });
+    const { keys } = await bridge.request("list_api_keys");
+    els.keyList.innerHTML = "";
+    for (const k of keys) {
+      const li = document.createElement("li");
+      li.className = "key-row";
+      const name = document.createElement("span");
+      name.className = "key-name";
+      name.textContent = k.label;
+      const id = document.createElement("code");
+      id.textContent = k.id;
+      const rm = document.createElement("button");
+      rm.className = "key-remove";
+      rm.textContent = t("keyRemove");
+      rm.addEventListener("click", async () => {
+        rm.disabled = true;
+        try {
+          await bridge.request("revoke_api_key", { id: k.id });
+          toast(t("keyRemoved", { name: k.label }));
+          refreshKeyList();
+        } catch (e) { toast(e.message); rm.disabled = false; }
+      });
+      li.append(name, id, rm);
+      els.keyList.appendChild(li);
+    }
+    els.keyListEmpty.classList.toggle("hidden", keys.length > 0);
+  } catch {}
+}
+
+function closeKeyOverlay() { els.keyOverlay.classList.add("hidden"); }
+
+els.keygen.addEventListener("click", () => {
+  if (!mcpOnline) { toast(t("keygenOffline")); return; }
+  els.keyNameInput.value = "";
+  els.keyNameStage.classList.remove("hidden");
+  els.keyResultStage.classList.add("hidden");
+  els.keyOverlay.classList.remove("hidden");
+  els.keyNameInput.focus();
+});
+
+async function createKey() {
+  const label = els.keyNameInput.value.trim();
+  if (!label) { toast(t("keyNameRequired")); els.keyNameInput.focus(); return; }
+  els.keyCreate.disabled = true;
+  try {
+    const data = await bridge.request("generate_api_key", { label });
+    els.keyLabel.textContent = data.label;
     els.keyValue.textContent = data.key;
-    els.keyOverlay.classList.remove("hidden");
+    els.keyNameStage.classList.add("hidden");
+    els.keyResultStage.classList.remove("hidden");
     els.keyCopy.focus();
+    refreshKeyList();
   } catch (e) { toast(e.message); }
-  finally { els.keygen.disabled = false; }
+  finally { els.keyCreate.disabled = false; }
+}
+els.keyCreate.addEventListener("click", createKey);
+els.keyNameInput.addEventListener("keydown", e => {
+  if (e.key === "Enter") { e.preventDefault(); createKey(); }
 });
 els.keyCopy.addEventListener("click", async () => {
   const key = els.keyValue.textContent;
@@ -801,7 +861,8 @@ els.keyCopy.addEventListener("click", async () => {
     toast(t("copyFailed"));
   }
 });
-els.keyClose.addEventListener("click", () => els.keyOverlay.classList.add("hidden"));
+els.keyClose.addEventListener("click", closeKeyOverlay);
+els.keyCancel.addEventListener("click", closeKeyOverlay);
 
 /* ————— render loop ————— */
 let last = performance.now();

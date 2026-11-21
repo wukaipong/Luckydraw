@@ -177,6 +177,11 @@
         <div class="row">
           <button id="keygenBtn" class="btn gold small" data-i18n="keygenBtn"></button>
         </div>
+        <div class="key-lib">
+          <h4 data-i18n="keyListTitle"></h4>
+          <ul id="keyList" class="key-list"></ul>
+          <p id="keyListEmpty" class="mcp-hint" data-i18n="keyListEmpty"></p>
+        </div>
       </section>
     </div>
   </div>
@@ -196,13 +201,24 @@
 
   <div id="keyOverlay" class="hidden" role="dialog" aria-modal="true">
     <div id="keyCard">
-      <p class="wc-title" data-i18n="keyTitle"></p>
-      <code id="keyValue"></code>
-      <div class="wc-actions">
-        <button id="keyCopyBtn" class="btn gold" data-i18n="copyKey"></button>
-        <button id="keyCloseBtn" class="btn redline" data-i18n="closeKey"></button>
+      <div id="keyNameStage">
+        <p class="wc-title" data-i18n="keyNameTitle"></p>
+        <input id="keyNameInput" type="text" maxlength="40" data-i18n-ph="keyNamePh" aria-label="Key name">
+        <div class="wc-actions">
+          <button id="keyCreateBtn" class="btn gold" data-i18n="keyCreate"></button>
+          <button id="keyCancelBtn" class="btn redline" data-i18n="keyCancel"></button>
+        </div>
       </div>
-      <p class="wc-hint" data-i18n="keyHint"></p>
+      <div id="keyResultStage" class="hidden">
+        <p class="wc-title" data-i18n="keyTitle"></p>
+        <p id="keyLabel" class="key-label"></p>
+        <code id="keyValue"></code>
+        <div class="wc-actions">
+          <button id="keyCopyBtn" class="btn gold" data-i18n="copyKey"></button>
+          <button id="keyCloseBtn" class="btn redline" data-i18n="closeKey"></button>
+        </div>
+        <p class="wc-hint" data-i18n="keyHint"></p>
+      </div>
     </div>
   </div>
 

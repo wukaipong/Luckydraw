@@ -9,7 +9,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { verifyKey, generateKey } from "./keys.mjs";
+import { verifyKey, generateKey, listKeys, revokeKeyById } from "./keys.mjs";
 
 if (!verifyKey(process.env.LUCKYDRAW_API_KEY)) {
   console.error("[luckydraw] MCP requires a valid API key.");
@@ -164,13 +164,24 @@ wss.on("connection", (ws, req) => {
       console.error(`[luckydraw] PWA connected`);
       return;
     }
-    if (msg.type === "request" && msg.name === "generate_api_key") {
+    if (msg.type === "request" && ["generate_api_key", "list_api_keys", "revoke_api_key"].includes(msg.name)) {
       const reply = ok => ws.send(JSON.stringify({ type: "response", id: msg.id, ...ok }));
-      if (!isLocal) { reply({ ok: false, error: "API key generation is only allowed from a local connection" }); return; }
+      if (!isLocal) { reply({ ok: false, error: "API key management is only allowed from a local connection" }); return; }
       try {
-        const { key, entry } = generateKey(typeof msg.args?.label === "string" ? msg.args.label : "ui");
-        console.error(`[luckydraw] API key generated via UI (${entry.id})`);
-        reply({ ok: true, data: { key, id: entry.id, label: entry.label } });
+        if (msg.name === "generate_api_key") {
+          const label = typeof msg.args?.label === "string" ? msg.args.label.trim() : "";
+          if (!label) throw new Error("A name is required for the new API key");
+          const { key, entry } = generateKey(label);
+          console.error(`[luckydraw] API key generated via UI (${entry.id} "${entry.label}")`);
+          reply({ ok: true, data: { key, id: entry.id, label: entry.label } });
+        } else if (msg.name === "list_api_keys") {
+          reply({ ok: true, data: { keys: listKeys() } });
+        } else {
+          const id = String(msg.args?.id || "");
+          if (!revokeKeyById(id)) throw new Error(`No API key with id "${id}"`);
+          console.error(`[luckydraw] API key revoked via UI (${id})`);
+          reply({ ok: true, data: { revoked: id } });
+        }
       } catch (err) {
         reply({ ok: false, error: String(err.message || err) });
       }

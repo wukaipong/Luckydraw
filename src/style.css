@@ -504,6 +504,27 @@ textarea:focus { border-color: var(--red); border-style: solid; box-shadow: 0 0 
 .dot.online { background: var(--success); box-shadow: 0 0 10px var(--success); }
 .mcp-hint { font-size: 12px; color: #b8cdd6; margin-top: 8px; line-height: 1.55; }
 .mcp-card .row { margin-top: 12px; }
+.key-lib { margin-top: 14px; border-top: 2px dashed rgba(217, 154, 31, .45); padding-top: 10px; }
+.key-lib h4 {
+  font-size: 12px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 8px;
+}
+.key-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.key-row {
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(0,0,0,.28); border: 1px solid rgba(217, 154, 31, .3);
+  border-radius: 8px; padding: 8px 10px;
+}
+.key-name { flex: 1; min-width: 0; font-size: 13px; font-weight: 700; color: var(--cream); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.key-row code { flex: none; font-size: 10.5px; color: var(--pale); background: rgba(0,0,0,.35); padding: 3px 7px; border-radius: 5px; }
+.key-remove {
+  flex: none; font-family: var(--font-body); font-size: 11.5px; font-weight: 800;
+  color: #ff9aa4; background: transparent; border: 1.5px solid rgba(232, 64, 77, .6);
+  border-radius: 6px; padding: 4px 10px; cursor: pointer; transition: background .2s, transform .15s;
+}
+.key-remove:hover { background: rgba(232, 64, 77, .22); transform: scale(1.05); }
+.key-remove:focus { outline: none; box-shadow: 0 0 0 3px rgba(232, 64, 77, .3); }
+.key-remove:disabled { opacity: .5; cursor: default; }
 
 /* ————— winner overlay ————— */
 #winnerOverlay, #keyOverlay {
@@ -561,6 +582,14 @@ textarea:focus { border-color: var(--red); border-style: solid; box-shadow: 0 0 
   overflow-wrap: anywhere; user-select: all;
 }
 #keyOverlay { z-index: 95; }
+#keyNameInput {
+  display: block; width: 100%; margin: 16px 0 20px; padding: 12px 14px;
+  font-family: var(--font-body); font-size: 15px; font-weight: 700; color: var(--ink);
+  background: #fff; border: 2px solid var(--gold-deep); border-radius: 10px; outline: none;
+  transition: border-color .2s, box-shadow .2s;
+}
+#keyNameInput:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba(232, 64, 77, .18); }
+.key-label { margin-top: 8px; font-size: 14px; font-weight: 900; color: var(--teal); overflow-wrap: anywhere; }
 
 /* ————— toasts ————— */
 #toasts { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 100; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
@@ -660,6 +689,12 @@ body.tv .track-name { font-size: 16px; padding: 10px 14px; }
 body.tv .track-vid { font-size: 13px; padding: 4px 10px; }
 body.tv .track-del { width: 38px; height: 38px; font-size: 19px; }
 body.tv .track-add { margin-top: 14px; }
+body.tv .key-lib h4 { font-size: 16px; margin-bottom: 12px; }
+body.tv .key-list { gap: 12px; }
+body.tv .key-name { font-size: 16px; }
+body.tv .key-row code { font-size: 13px; padding: 4px 10px; }
+body.tv .key-remove { font-size: 14px; padding: 8px 16px; }
+body.tv #keyNameInput { font-size: 17px; padding: 14px 16px; }
 body.tv textarea { font-size: 16px; }
 body.tv .btn { font-size: 16px; padding: 12px 22px; }
 body.tv .btn.small { font-size: 14px; padding: 9px 16px; }
