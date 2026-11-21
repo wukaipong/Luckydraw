@@ -386,7 +386,9 @@ textarea:focus { border-color: var(--red); border-style: solid; box-shadow: 0 0 
 .range-block > label { font-size: 12.5px; font-weight: 800; color: var(--teal); text-transform: uppercase; letter-spacing: .6px; }
 .range-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
 .dash { color: var(--maroon); font-weight: 800; }
-.stepper { display: inline-flex; align-items: stretch; border: 2px solid var(--gold-deep); border-radius: 999px; overflow: hidden; background: #fffaf0; }
+.stepper { display: inline-flex; align-items: stretch; border: 2px solid var(--gold-deep); border-radius: 999px; background: #fffaf0; }
+.stepper > button:first-child { border-radius: 999px 0 0 999px; }
+.stepper > button:last-child { border-radius: 0 999px 999px 0; }
 .stepper button {
   width: 30px; border: none; background: var(--gold); color: var(--maroon);
   font-size: 16px; font-weight: 800; cursor: pointer; transition: background .15s;
@@ -484,6 +486,37 @@ textarea:focus { border-color: var(--red); border-style: solid; box-shadow: 0 0 
 .track-add { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 .track-add .track-name { flex: 1 1 130px; }
 .track-add .btn { flex-shrink: 0; }
+
+/* ————— pencil edit-lock: TV fields stay readonly until the pencil is pressed ————— */
+.edit-wrap { position: relative; display: block; }
+.edit-wrap > .track-name, .edit-wrap > textarea { width: 100%; }
+.track-add .edit-wrap { flex: 1 1 130px; min-width: 0; }
+.track-row .edit-wrap { flex: 1; min-width: 0; }
+.stepper .edit-wrap { display: flex; align-items: stretch; }
+.edit-pencil {
+  display: none; position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  width: 26px; height: 26px; border-radius: 50%; padding: 0;
+  border: 2px solid var(--gold-deep);
+  background: linear-gradient(180deg, var(--gold), var(--gold-deep));
+  color: var(--maroon); cursor: pointer; place-items: center;
+  box-shadow: 0 2px 5px rgba(0,0,0,.3); z-index: 2;
+  transition: transform .15s, filter .15s;
+}
+.edit-pencil:hover { filter: brightness(1.08); transform: translateY(-50%) scale(1.08); }
+.edit-wrap.area .edit-pencil { top: 8px; transform: none; }
+.edit-wrap.area .edit-pencil:hover { transform: scale(1.08); }
+.edit-pencil svg { width: 14px; height: 14px; }
+.edit-pencil .ic-check { display: none; }
+.edit-wrap.editing .edit-pencil { background: linear-gradient(180deg, var(--success), #2e7d4f); border-color: #2e7d4f; color: #fff; }
+.edit-wrap.editing .ic-pencil { display: none; }
+.edit-wrap.editing .ic-check { display: block; }
+body.tv .edit-pencil { display: grid; width: 34px; height: 34px; right: 7px; }
+body.tv .edit-pencil svg { width: 18px; height: 18px; }
+body.tv .edit-wrap:not(.editing) > .track-name,
+body.tv .edit-wrap:not(.editing) > textarea { padding-right: 50px; }
+body.tv .stepper .edit-pencil { width: 26px; height: 26px; right: 3px; }
+body.tv .stepper .edit-pencil svg { width: 14px; height: 14px; }
+body.tv .stepper .edit-wrap:not(.editing) > input { padding-right: 28px; }
 .switch { position: relative; width: 46px; height: 24px; display: inline-block; }
 .switch input { opacity: 0; width: 0; height: 0; }
 .switch i {

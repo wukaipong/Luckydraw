@@ -24,7 +24,7 @@ const els = {
   history: $("historyList"), historyBadge: $("historyBadge"), historyEmpty: $("historyEmpty"),
   exportBtn: $("exportBtn"), resetBtn: $("resetBtn"),
   overlay: $("winnerOverlay"), winnerName: $("winnerName"),
-  confirm: $("confirmBtn"), redraw: $("redrawBtn"),
+  confirm: $("confirmBtn"),
   sound: $("soundBtn"), soundLabel: $("soundLabel"),
   soundOn: $("soundIconOn"), soundOff: $("soundIconOff"),
   soundToggle: $("soundToggle"),
@@ -190,6 +190,7 @@ function applyTv() {
   else if (!settingsOpen) els.settingsPage.classList.add("hidden");
   fx.setTv(on);
   wheel.resize();
+  syncEditLocks();
   if (on) els.topbar.insertBefore(els.meta, els.topbar.lastElementChild);
   else els.stage.appendChild(els.meta);
   if (on && !was) els.go.focus();
@@ -211,6 +212,63 @@ function guardEdit() {
   if (phase === "revealed") cancelReveal();
   return true;
 }
+
+/* ————— TV text-entry guard: fields stay readonly until the pencil is pressed ————— */
+const PENCIL_SVG = '<svg class="ic-pencil" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>';
+const CHECK_SVG = '<svg class="ic-check" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>';
+const editLocks = [];
+
+function lockInput(e) {
+  const tv = isTv();
+  e.wrap.classList.remove("editing");
+  e.inp.readOnly = tv;
+  if (tv) e.inp.setAttribute("inputmode", "none");
+  else e.inp.removeAttribute("inputmode");
+  e.btn.setAttribute("aria-label", t("editText"));
+  e.btn.title = t("editText");
+}
+
+function syncEditLocks() {
+  for (let i = editLocks.length - 1; i >= 0; i--) {
+    const e = editLocks[i];
+    if (!e.inp.isConnected) { editLocks.splice(i, 1); continue; }
+    if (!isTv() || document.activeElement !== e.inp) lockInput(e);
+  }
+}
+
+function guardInput(inp, area = false) {
+  const wrap = document.createElement("span");
+  wrap.className = "edit-wrap" + (area ? " area" : "");
+  inp.replaceWith(wrap);
+  wrap.appendChild(inp);
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "edit-pencil";
+  btn.innerHTML = PENCIL_SVG + CHECK_SVG;
+  wrap.appendChild(btn);
+  const entry = { inp, wrap, btn };
+  editLocks.push(entry);
+  // keep focus in the field when the check icon is pressed with a pointer
+  btn.addEventListener("pointerdown", e => { if (wrap.classList.contains("editing")) e.preventDefault(); });
+  btn.addEventListener("click", () => {
+    if (wrap.classList.contains("editing")) { inp.blur(); return; }
+    inp.readOnly = false;
+    inp.removeAttribute("inputmode");
+    wrap.classList.add("editing");
+    btn.setAttribute("aria-label", t("editDone"));
+    btn.title = t("editDone");
+    inp.focus();
+  });
+  inp.addEventListener("blur", e => { if (isTv() && e.relatedTarget !== btn) lockInput(entry); });
+  lockInput(entry);
+  return entry;
+}
+
+guardInput(els.names, true);
+guardInput(els.trackUrl);
+guardInput(els.trackName);
+guardInput(els.rangeMin);
+guardInput(els.rangeMax);
 
 function cancelReveal() {
   els.overlay.classList.add("hidden");
@@ -383,6 +441,8 @@ function renderTracks() {
     inp.placeholder = trackLabel(tr);
     inp.setAttribute("aria-label", t("trackNamePh"));
     inp.addEventListener("change", () => renameTrack(tr.id, inp.value));
+    li.append(inp);
+    guardInput(inp);
     const kind = document.createElement("span");
     kind.className = "track-kind" + (tr.kind === "youtube" ? " yt" : tr.kind === "url" ? " url" : "");
     kind.textContent = trackKindTag(tr);
@@ -398,7 +458,7 @@ function renderTracks() {
       const { resetSlots } = removeTrack(tr.id);
       toast(t("trackRemoved") + (resetSlots.length ? " · " + t("trackResetSlots") : ""));
     });
-    li.append(inp, kind, vid, del);
+    li.append(kind, vid, del);
     els.trackList.appendChild(li);
   }
 }
@@ -522,12 +582,8 @@ function confirmWinner() {
 }
 
 /* ————— UI events ————— */
-els.go.addEventListener("click", () => {
-  if (phase === "revealed") { startDraw().catch(() => {}); return; }
-  startDraw().catch(e => toast(e.message));
-});
+els.go.addEventListener("click", () => startDraw().catch(e => toast(e.message)));
 els.confirm.addEventListener("click", () => confirmWinner().catch(() => {}));
-els.redraw.addEventListener("click", () => startDraw().catch(() => {}));
 
 els.add.addEventListener("click", () => {
   if (!guardEdit()) return;
@@ -684,6 +740,7 @@ els.langSelect.addEventListener("change", () => {
   refreshUI();
   updateMcpStatus();
   refreshAuth();
+  syncEditLocks();
   save();
 });
 
@@ -700,9 +757,8 @@ window.addEventListener("keydown", e => {
   const tag = document.activeElement?.tagName;
   if (tag === "TEXTAREA" || tag === "INPUT" || tag === "SELECT") return;
   if (settingsOpen || isTv()) return;
-  if (e.code === "Space") { e.preventDefault(); if (phase === "idle" || phase === "revealed") startDraw().catch(() => {}); }
+  if (e.code === "Space") { e.preventDefault(); if (phase === "idle") startDraw().catch(() => {}); }
   else if (e.code === "Enter" && phase === "revealed") confirmWinner().catch(() => {});
-  else if (e.code === "KeyR" && phase === "revealed") startDraw().catch(() => {});
 });
 
 /* audio unlock + playback retry on every gesture until the browser lets sound through */

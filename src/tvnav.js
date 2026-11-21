@@ -9,6 +9,8 @@ const DIRS = {
 function candidates(scope) {
   return [...scope.querySelectorAll(SEL)].filter(el => {
     if (el.disabled || el.getAttribute("aria-hidden") === "true") return false;
+    // locked TV fields are not stops — the pencil button beside them is
+    if (el.readOnly && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return false;
     const r = el.getClientRects();
     return r.length > 0 && r[0].width > 0 && r[0].height > 0;
   });
