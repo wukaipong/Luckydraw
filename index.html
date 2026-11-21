@@ -201,6 +201,16 @@
 
   <div id="keyOverlay" class="hidden" role="dialog" aria-modal="true">
     <div id="keyCard">
+      <div id="adminPinStage" class="hidden">
+        <p class="wc-title" data-i18n="adminPinTitle"></p>
+        <input id="adminPinInput" type="password" maxlength="128" autocomplete="off" data-i18n-ph="adminPinPh" aria-label="Admin PIN">
+        <p id="adminPinErr" class="pin-err hidden" role="alert"></p>
+        <div class="wc-actions">
+          <button id="adminPinSubmitBtn" class="btn gold" data-i18n="adminPinSubmit"></button>
+          <button id="adminPinCancelBtn" class="btn redline" data-i18n="keyCancel"></button>
+        </div>
+        <p class="wc-hint" data-i18n="adminPinHint"></p>
+      </div>
       <div id="keyNameStage">
         <p class="wc-title" data-i18n="keyNameTitle"></p>
         <input id="keyNameInput" type="text" maxlength="40" data-i18n-ph="keyNamePh" aria-label="Key name">

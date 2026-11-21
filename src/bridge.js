@@ -29,7 +29,12 @@ export class Bridge {
         const { resolve, reject, timer } = this.pending.get(msg.id);
         clearTimeout(timer);
         this.pending.delete(msg.id);
-        msg.ok ? resolve(msg.data) : reject(new Error(msg.error));
+        if (msg.ok) resolve(msg.data);
+        else {
+          const err = new Error(msg.error);
+          if (msg.code) err.code = msg.code;
+          reject(err);
+        }
         return;
       }
       if (msg.type !== "command") return;

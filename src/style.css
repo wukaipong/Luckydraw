@@ -636,13 +636,15 @@ body.tv .stepper .edit-wrap:not(.editing) > input { padding-right: 28px; }
   overflow-wrap: anywhere; user-select: all;
 }
 #keyOverlay { z-index: 95; }
-#keyNameInput {
+#keyNameInput, #adminPinInput {
   display: block; width: 100%; margin: 16px 0 20px; padding: 12px 14px;
   font-family: var(--font-body); font-size: 15px; font-weight: 700; color: var(--ink);
   background: #fff; border: 2px solid var(--gold-deep); border-radius: 10px; outline: none;
   transition: border-color .2s, box-shadow .2s;
 }
-#keyNameInput:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba(232, 64, 77, .18); }
+#keyNameInput:focus, #adminPinInput:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba(232, 64, 77, .18); }
+#adminPinInput { letter-spacing: .25em; }
+.pin-err { margin: -10px 0 16px; font-size: 13px; font-weight: 900; color: var(--red-deep); }
 .key-label { margin-top: 8px; font-size: 14px; font-weight: 900; color: var(--teal); overflow-wrap: anywhere; }
 
 /* ————— toasts ————— */
@@ -784,7 +786,7 @@ body.tv .key-list { gap: 12px; }
 body.tv .key-name { font-size: 16px; }
 body.tv .key-row code { font-size: 13px; padding: 4px 10px; }
 body.tv .key-remove { font-size: 14px; padding: 8px 16px; }
-body.tv #keyNameInput { font-size: 17px; padding: 14px 16px; }
+body.tv #keyNameInput, body.tv #adminPinInput { font-size: 17px; padding: 14px 16px; }
 body.tv textarea { font-size: 16px; }
 body.tv .btn { font-size: 16px; padding: 12px 22px; }
 body.tv .btn.small { font-size: 14px; padding: 9px 16px; }

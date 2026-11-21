@@ -1,7 +1,7 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash, timingSafeEqual } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -24,6 +24,47 @@ const MUSIC_DIR = path.join(__dirname, "..", "music");
 const DIST_DIR = path.join(__dirname, "..", "dist");
 fs.mkdirSync(MUSIC_DIR, { recursive: true });
 const PORT = Number(process.env.LUCKYDRAW_PORT || 4173);
+const ADMIN_PIN = (process.env.LUCKYDRAW_ADMIN_PIN || "").trim();
+console.error(ADMIN_PIN
+  ? "[luckydraw] Remote API-key management enabled (admin PIN required)."
+  : "[luckydraw] Remote API-key management disabled — set LUCKYDRAW_ADMIN_PIN to enable it.");
+
+const PIN_MAX_FAILS = 5;
+const PIN_LOCKOUT_MS = 10 * 60 * 1000;
+const pinFails = new Map();
+
+function pinMatches(candidate) {
+  if (!ADMIN_PIN || typeof candidate !== "string" || !candidate) return false;
+  const digest = value => createHash("sha256").update(value).digest();
+  return timingSafeEqual(digest(candidate), digest(ADMIN_PIN));
+}
+
+function pinRetryAfter(ip) {
+  const entry = pinFails.get(ip);
+  if (!entry) return 0;
+  const now = Date.now();
+  if (entry.until > now) return entry.until - now;
+  if (entry.resetAt <= now) pinFails.delete(ip);
+  return 0;
+}
+
+function pinNoteFailure(ip) {
+  const now = Date.now();
+  let entry = pinFails.get(ip);
+  if (!entry || entry.resetAt <= now) entry = { count: 0, resetAt: now + PIN_LOCKOUT_MS, until: 0 };
+  entry.count += 1;
+  if (entry.count >= PIN_MAX_FAILS) { entry.until = now + PIN_LOCKOUT_MS; entry.count = 0; }
+  pinFails.set(ip, entry);
+  if (pinFails.size > 500) for (const [key, value] of pinFails) if (value.resetAt <= now) pinFails.delete(key);
+}
+
+function clientIp(req) {
+  const cf = req.headers["cf-connecting-ip"];
+  if (typeof cf === "string" && cf.trim()) return cf.trim();
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string" && forwarded.trim()) return forwarded.split(",")[0].trim();
+  return req.socket.remoteAddress || "";
+}
 
 const MIME = {
   ".mp3": "audio/mpeg", ".ogg": "audio/ogg", ".wav": "audio/wav",
@@ -157,6 +198,7 @@ wss.on("connection", (ws, req) => {
   // Tunnel traffic (cloudflared) arrives from loopback but carries proxy headers.
   const addr = req.socket.remoteAddress || "";
   const isLocal = /^(::1|::ffff:127\.|127\.)/.test(addr) && !req.headers["cf-connecting-ip"] && !req.headers["x-forwarded-for"];
+  const ip = clientIp(req);
   ws.on("message", raw => {
     let msg;
     try { msg = JSON.parse(raw.toString()); } catch { return; }
@@ -167,7 +209,25 @@ wss.on("connection", (ws, req) => {
     }
     if (msg.type === "request" && ["generate_api_key", "list_api_keys", "revoke_api_key"].includes(msg.name)) {
       const reply = ok => ws.send(JSON.stringify({ type: "response", id: msg.id, ...ok }));
-      if (!isLocal) { reply({ ok: false, error: "API key management is only allowed from a local connection" }); return; }
+      if (!isLocal) {
+        if (!ADMIN_PIN) {
+          reply({ ok: false, code: "PIN_DISABLED", error: "Remote API-key management is disabled — set LUCKYDRAW_ADMIN_PIN on the server" });
+          return;
+        }
+        const retryAfter = pinRetryAfter(ip);
+        if (retryAfter > 0) {
+          reply({ ok: false, code: "PIN_LOCKED", error: `Too many wrong PIN attempts — try again in ${Math.max(1, Math.ceil(retryAfter / 60000))} min` });
+          return;
+        }
+        const pin = msg.args?.adminPin;
+        if (!pin) { reply({ ok: false, code: "PIN_REQUIRED", error: "Admin PIN required" }); return; }
+        if (!pinMatches(pin)) {
+          pinNoteFailure(ip);
+          reply({ ok: false, code: "PIN_BAD", error: "Wrong admin PIN" });
+          return;
+        }
+        pinFails.delete(ip);
+      }
       try {
         if (msg.name === "generate_api_key") {
           const label = typeof msg.args?.label === "string" ? msg.args.label.trim() : "";

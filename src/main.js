@@ -41,6 +41,8 @@ const els = {
   keyNameStage: $("keyNameStage"), keyResultStage: $("keyResultStage"),
   keyNameInput: $("keyNameInput"), keyCreate: $("keyCreateBtn"),
   keyCancel: $("keyCancelBtn"), keyLabel: $("keyLabel"),
+  adminPinStage: $("adminPinStage"), adminPinInput: $("adminPinInput"),
+  adminPinErr: $("adminPinErr"), adminPinSubmit: $("adminPinSubmitBtn"), adminPinCancel: $("adminPinCancelBtn"),
   toasts: $("toasts")
 };
 
@@ -914,14 +916,71 @@ const bridge = new Bridge({
 });
 
 /* ————— API key management ————— */
+const PIN_SESSION_KEY = "ld-admin-pin";
+const PIN_SESSION_MS = 15 * 60 * 1000;
+let pinResolve = null;
+
+function savedPin() {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(PIN_SESSION_KEY) || "null");
+    if (saved && typeof saved.pin === "string" && saved.exp > Date.now()) return saved.pin;
+    sessionStorage.removeItem(PIN_SESSION_KEY);
+  } catch {}
+  return "";
+}
+function rememberPin(pin) {
+  try { sessionStorage.setItem(PIN_SESSION_KEY, JSON.stringify({ pin, exp: Date.now() + PIN_SESSION_MS })); } catch {}
+}
+function forgetPin() {
+  try { sessionStorage.removeItem(PIN_SESSION_KEY); } catch {}
+}
+
+function askPin(errorText = "") {
+  els.adminPinErr.textContent = errorText;
+  els.adminPinErr.classList.toggle("hidden", !errorText);
+  els.adminPinInput.value = "";
+  els.keyNameStage.classList.add("hidden");
+  els.keyResultStage.classList.add("hidden");
+  els.adminPinStage.classList.remove("hidden");
+  els.keyOverlay.classList.remove("hidden");
+  els.adminPinInput.focus();
+  return new Promise(resolve => { pinResolve = resolve; });
+}
+function settlePin(value) {
+  if (!pinResolve) return;
+  const resolve = pinResolve;
+  pinResolve = null;
+  resolve(value);
+}
+
+async function adminRequest(name, args = {}) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const pin = savedPin();
+    try {
+      return await bridge.request(name, pin ? { ...args, adminPin: pin } : args);
+    } catch (e) {
+      if (e.code === "PIN_LOCKED") throw new Error(t("adminPinLocked"));
+      if (e.code === "PIN_DISABLED") throw new Error(t("adminPinDisabled"));
+      if (e.code !== "PIN_REQUIRED" && e.code !== "PIN_BAD") throw e;
+      forgetPin();
+      const entered = await askPin(e.code === "PIN_BAD" ? t("adminPinWrong") : "");
+      if (!entered) throw Object.assign(new Error(t("keyCancel")), { cancelled: true });
+      rememberPin(entered);
+    }
+  }
+  throw new Error(t("adminPinWrong"));
+}
+
 async function refreshKeyList() {
   if (!mcpOnline) {
     els.keyList.innerHTML = "";
+    els.keyListEmpty.textContent = t("keyListEmpty");
     els.keyListEmpty.classList.remove("hidden");
     return;
   }
   try {
-    const { keys } = await bridge.request("list_api_keys");
+    const pin = savedPin();
+    const { keys } = await bridge.request("list_api_keys", pin ? { adminPin: pin } : {});
     els.keyList.innerHTML = "";
     for (const k of keys) {
       const li = document.createElement("li");
@@ -937,16 +996,28 @@ async function refreshKeyList() {
       rm.addEventListener("click", async () => {
         rm.disabled = true;
         try {
-          await bridge.request("revoke_api_key", { id: k.id });
+          await adminRequest("revoke_api_key", { id: k.id });
+          closeKeyOverlay();
           toast(t("keyRemoved", { name: k.label }));
           refreshKeyList();
-        } catch (e) { toast(e.message); rm.disabled = false; }
+        } catch (e) {
+          if (!e.cancelled) { closeKeyOverlay(); toast(e.message); }
+          rm.disabled = false;
+        }
       });
       li.append(name, id, rm);
       els.keyList.appendChild(li);
     }
+    els.keyListEmpty.textContent = t("keyListEmpty");
     els.keyListEmpty.classList.toggle("hidden", keys.length > 0);
-  } catch {}
+  } catch (e) {
+    els.keyList.innerHTML = "";
+    els.keyListEmpty.classList.remove("hidden");
+    if (e.code === "PIN_DISABLED") els.keyListEmpty.textContent = t("adminPinDisabled");
+    else if (e.code === "PIN_LOCKED") els.keyListEmpty.textContent = t("adminPinLocked");
+    else if (e.code === "PIN_REQUIRED" || e.code === "PIN_BAD") els.keyListEmpty.textContent = t("adminPinNeeded");
+    else els.keyListEmpty.classList.add("hidden");
+  }
 }
 
 function closeKeyOverlay() { els.keyOverlay.classList.add("hidden"); }
@@ -954,6 +1025,7 @@ function closeKeyOverlay() { els.keyOverlay.classList.add("hidden"); }
 els.keygen.addEventListener("click", () => {
   if (!mcpOnline) { toast(t("keygenOffline")); return; }
   els.keyNameInput.value = "";
+  els.adminPinStage.classList.add("hidden");
   els.keyNameStage.classList.remove("hidden");
   els.keyResultStage.classList.add("hidden");
   els.keyOverlay.classList.remove("hidden");
@@ -965,20 +1037,38 @@ async function createKey() {
   if (!label) { toast(t("keyNameRequired")); els.keyNameInput.focus(); return; }
   els.keyCreate.disabled = true;
   try {
-    const data = await bridge.request("generate_api_key", { label });
+    const data = await adminRequest("generate_api_key", { label });
     els.keyLabel.textContent = data.label;
     els.keyValue.textContent = data.key;
+    els.adminPinStage.classList.add("hidden");
     els.keyNameStage.classList.add("hidden");
     els.keyResultStage.classList.remove("hidden");
     els.keyCopy.focus();
     refreshKeyList();
-  } catch (e) { toast(e.message); }
+  } catch (e) {
+    if (!e.cancelled) {
+      toast(e.message);
+      els.adminPinStage.classList.add("hidden");
+      els.keyResultStage.classList.add("hidden");
+      els.keyNameStage.classList.remove("hidden");
+    }
+  }
   finally { els.keyCreate.disabled = false; }
 }
 els.keyCreate.addEventListener("click", createKey);
 els.keyNameInput.addEventListener("keydown", e => {
   if (e.key === "Enter") { e.preventDefault(); createKey(); }
 });
+els.adminPinSubmit.addEventListener("click", () => {
+  const pin = els.adminPinInput.value.trim();
+  if (!pin) { els.adminPinInput.focus(); return; }
+  els.adminPinStage.classList.add("hidden");
+  settlePin(pin);
+});
+els.adminPinInput.addEventListener("keydown", e => {
+  if (e.key === "Enter") { e.preventDefault(); els.adminPinSubmit.click(); }
+});
+els.adminPinCancel.addEventListener("click", () => { settlePin(null); closeKeyOverlay(); });
 els.keyCopy.addEventListener("click", async () => {
   const key = els.keyValue.textContent;
   let ok = false;
